@@ -1,0 +1,1011 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<link rel="apple-touch-icon" href="icone.png">
+<link rel="icon" href="icone.png">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#FAF7F0">
+<title>Lar & Vida</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+:root{
+  --bg:#FAF7F0;--surf:#FFF;--brd:#EAE2D4;--brds:#F3EDE2;
+  --pri:#C14B2A;--pris:#FAE9E4;
+  --grn:#4A865A;--grns:#E2F0E6;
+  --amb:#C5820A;--ambs:#FBF2D8;
+  --txt:#1C1208;--txm:#6B5A48;--txl:#A09080;
+}
+body{background:var(--bg);font-family:-apple-system,system-ui,'Segoe UI',sans-serif;min-height:100vh;overflow-x:hidden}
+#app{max-width:480px;margin:0 auto}
+input,button,textarea,select{font-family:inherit}
+button{cursor:pointer}
+
+/* ── PIN ── */
+#pin-screen{display:flex;align-items:center;justify-content:center;min-height:100vh;padding:24px}
+#pin-box{text-align:center;width:100%}
+#pin-box .logo{font-size:52px;margin-bottom:12px}
+#pin-box h1{font-size:26px;font-weight:700;color:var(--txt);margin-bottom:6px}
+#pin-box p{font-size:13px;color:var(--txl);margin-bottom:28px}
+#pin-dots{display:flex;justify-content:center;gap:14px;margin-bottom:10px}
+.dot{width:14px;height:14px;border-radius:50%;border:2px solid var(--brd);background:var(--brds);transition:background .15s}
+.dot.filled{background:var(--pri);border-color:var(--pri)}
+#pin-err{font-size:12px;color:var(--pri);min-height:18px;margin-bottom:8px}
+#keypad{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;max-width:260px;margin:0 auto}
+.kbtn{background:var(--surf);border:1px solid var(--brd);border-radius:14px;padding:16px;font-size:22px;font-weight:600;color:var(--txt);transition:background .1s}
+.kbtn:active{background:var(--brds)}
+.kbtn.del{font-size:18px;color:var(--txm)}
+
+/* ── APP ── */
+#app{display:none;padding-bottom:76px}
+header{background:var(--surf);border-bottom:1px solid var(--brd);padding:13px 16px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:40}
+.h-title{font-size:20px;font-weight:700;color:var(--txt);letter-spacing:-.3px}
+.h-sub{font-size:11px;color:var(--txl)}
+.h-right{display:flex;align-items:center;gap:6px}
+.badge{border-radius:20px;padding:3px 10px;font-size:11px;font-weight:500}
+.badge-r{background:var(--pris);color:var(--pri)}
+.badge-g{background:var(--grns);color:var(--grn)}
+#sync-btn{background:none;border:none;font-size:16px;color:var(--txl);padding:4px;line-height:1}
+#content{padding:14px 14px 0}
+nav{position:fixed;bottom:0;left:0;right:0;margin:0 auto;width:100%;max-width:480px;background:var(--surf);border-top:1px solid var(--brd);display:flex;padding-bottom:4px;z-index:40}
+.nb{flex:1;background:none;border:none;display:flex;flex-direction:column;align-items:center;gap:3px;padding:8px 0;font-size:10px;color:var(--txl);font-weight:400;transition:color .1s}
+.nb.on{color:var(--pri);font-weight:600}
+.nb-ico{font-size:20px;line-height:1}
+.nb-bar{width:18px;height:2px;background:var(--pri);border-radius:1px}
+
+/* ── SHEET MODAL ── */
+#overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:80;display:none}
+#sheet{position:fixed;bottom:0;left:0;right:0;margin:0 auto;width:100%;max-width:480px;background:var(--surf);border-radius:20px 20px 0 0;padding:20px 18px 44px;max-height:88vh;overflow-y:auto;overflow-x:hidden;z-index:90;display:none}
+.sheet-drag{width:36px;height:4px;background:var(--brd);border-radius:2px;margin:0 auto 16px}
+.sheet-title{font-size:18px;font-weight:700;color:var(--txt);margin-bottom:16px}
+
+/* ── CARDS ── */
+.card{background:var(--surf);border-radius:16px;box-shadow:0 1px 8px rgba(0,0,0,.07);border:1px solid var(--brd)}
+.c-pad{padding:16px}
+.row{display:flex;align-items:center;justify-content:space-between}
+.mb8{margin-bottom:8px}
+.mb12{margin-bottom:12px}
+.mb14{margin-bottom:14px}
+
+/* ── FORM ── */
+.f-label{font-size:12px;color:var(--txm);font-weight:500;margin-bottom:4px}
+.f-inp{width:100%;border:1px solid var(--brd);border-radius:10px;padding:9px 12px;font-size:14px;color:var(--txt);background:var(--bg);outline:none}
+.f-inp:focus{border-color:var(--pri)}
+textarea.f-inp{resize:vertical;min-height:90px}
+.f-group{margin-bottom:12px}
+
+/* ── BUTTONS ── */
+.btn{border:none;border-radius:12px;padding:11px 20px;font-size:14px;font-weight:600;cursor:pointer;transition:opacity .15s;font-family:inherit}
+.btn:active{opacity:.8}
+.btn-pri{background:var(--pri);color:#FFF}
+.btn-sec{background:transparent;border:1.5px solid var(--pri);color:var(--pri)}
+.btn-grn{background:var(--grn);color:#FFF}
+.btn-sm{padding:7px 14px;font-size:12px}
+.btn-full{width:100%}
+.btn-dis{background:#C0B5A8;cursor:not-allowed}
+
+/* ── PROGRESS BAR ── */
+.prog-wrap{background:var(--brds);border-radius:6px;height:8px;overflow:hidden}
+.prog-bar{height:100%;border-radius:6px;transition:width .5s}
+
+/* ── CAT GRID ── */
+.cat-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.cat-btn{background:var(--bg);border:1.5px solid var(--brd);border-radius:10px;padding:8px 4px;cursor:pointer;text-align:center;transition:border-color .1s}
+.cat-btn.on{border-color:currentColor}
+.cat-ico{font-size:18px}
+.cat-lbl{font-size:10px;color:var(--txl);font-weight:500;margin-top:2px}
+
+/* ── USER PICK ── */
+.up-row{display:flex;gap:8px;margin-bottom:14px}
+.up-btn{flex:1;border:1.5px solid var(--brd);border-radius:10px;padding:9px 4px;cursor:pointer;font-weight:600;font-size:12px;color:var(--txm);background:var(--bg);transition:all .1s;font-family:inherit}
+.up-btn.on-r{background:var(--pris);border-color:var(--pri);color:var(--pri)}
+.up-btn.on-g{background:var(--grns);border-color:var(--grn);color:var(--grn)}
+.up-btn.on-a{background:var(--ambs);border-color:var(--amb);color:var(--amb)}
+
+/* ── ITEMS ── */
+.item-row{padding:10px 14px;margin-bottom:7px;display:flex;align-items:center;gap:10px}
+.item-ico{width:34px;height:34px;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0}
+.item-name{font-size:13px;font-weight:500;color:var(--txt)}
+.item-sub{font-size:11px;color:var(--txl)}
+.x-btn{background:none;border:none;cursor:pointer;color:var(--txl);font-size:20px;line-height:1;padding:0 2px;margin-left:auto}
+.check-box{width:22px;height:22px;border-radius:6px;border:2px solid var(--brd);background:none;cursor:pointer;flex-shrink:0}
+.check-box.done{border:none;background:var(--grn);color:#FFF;font-size:12px}
+
+/* ── DONUT CHART ── */
+#chart-wrap{display:flex;align-items:center;gap:16px;margin-bottom:8px}
+#donut{flex-shrink:0}
+#chart-legend{display:flex;flex-direction:column;gap:4px;flex:1}
+.leg-row{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--txm)}
+.leg-dot{width:8px;height:8px;border-radius:2px;flex-shrink:0}
+
+/* ── CALENDAR ── */
+.week-grid{display:flex;gap:4px}
+.day-btn{flex:1;padding:8px 2px;border-radius:10px;cursor:pointer;text-align:center;background:var(--bg);border:1.5px solid var(--brd);font-family:inherit;transition:background .1s}
+.day-btn.today{background:var(--pri);border-color:var(--pri)}
+.day-name{font-size:10px;color:var(--txl);margin-bottom:2px}
+.day-num{font-size:14px;font-weight:700;color:var(--txt)}
+.day-btn.today .day-name,.day-btn.today .day-num{color:#FFF}
+.day-dot{width:4px;height:4px;border-radius:2px;background:var(--amb);margin:2px auto 0}
+.day-btn.today .day-dot{background:#FFF9}
+.ev-card{padding:10px 12px;margin-bottom:6px;display:flex;align-items:center;justify-content:space-between}
+.ev-line{width:3px;border-radius:1.5px;align-self:stretch;flex-shrink:0;margin-right:10px}
+
+/* ── SHOPPING ── */
+#shop-summary{display:flex;gap:12px;margin-bottom:12px}
+.sum-col{flex:1;text-align:center}
+.sum-val{font-size:17px;font-weight:700}
+.sum-lbl{font-size:11px;color:var(--txl)}
+.warn-box{margin-top:10px;background:#FEE8E3;border-radius:8px;padding:7px 12px;font-size:12px;color:var(--pri)}
+.shop-done-hdr{font-size:11px;color:var(--txl);margin:10px 0 7px}
+
+/* ── NOTES ── */
+#notes-grid{columns:2;gap:10px}
+.note-card{border-radius:14px;padding:13px;margin-bottom:10px;break-inside:avoid;position:relative;border:1px solid transparent}
+.note-xtitle{font-size:13px;font-weight:600;color:var(--txt);margin-bottom:5px;padding-right:20px}
+.note-body{font-size:12px;color:var(--txm);line-height:1.55;white-space:pre-wrap;word-break:break-word}
+.note-foot{font-size:10px;color:var(--txl);margin-top:8px}
+.note-x{position:absolute;top:8px;right:9px;background:none;border:none;cursor:pointer;font-size:18px;line-height:1}
+
+/* ── SETTINGS ── */
+.setting-row{display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:1px solid var(--brds)}
+.setting-label{font-size:13px;font-weight:500;color:var(--txt)}
+.setting-sub{font-size:11px;color:var(--txl);margin-top:2px}
+
+/* ── SCAN ── */
+.scan-drop{background:var(--bg);border:2px dashed var(--brd);border-radius:14px;padding:28px 20px;text-align:center;cursor:pointer;margin-bottom:14px}
+.scan-ico{font-size:36px;margin-bottom:8px}
+
+/* ── EMPTY STATE ── */
+.empty{padding:28px;text-align:center}
+.empty-ico{font-size:28px;margin-bottom:6px}
+.empty-txt{color:var(--txl);font-size:13px}
+.empty-sub{color:var(--txl);font-size:12px;margin-top:3px}
+
+/* ── TOAST ── */
+#toast{position:fixed;bottom:90px;left:0;right:0;margin:0 auto;width:fit-content;max-width:320px;background:rgba(28,18,8,.85);color:#FFF;padding:9px 18px;border-radius:20px;font-size:13px;display:none;z-index:200;text-align:center}
+
+/* ── WEEK NAV ── */
+.week-nav{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+.wn-btn{background:var(--bg);border:1px solid var(--brd);border-radius:8px;width:32px;height:32px;cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center}
+.wn-lbl{font-size:13px;font-weight:600;color:var(--txt)}
+.day-section{margin-bottom:14px}
+.day-section-hdr{font-size:11px;font-weight:600;color:var(--txm);margin-bottom:6px;display:flex;align-items:center;gap:6px}
+.today-tag{background:var(--pri);color:#FFF;border-radius:4px;padding:1px 6px;font-size:10px}
+
+/* ── NOTE PALETTES ── */
+.pal-row{display:flex;gap:8px;margin-bottom:14px}
+.pal-btn{width:30px;height:30px;border-radius:8px;cursor:pointer;border:2.5px solid transparent;transition:border-color .1s}
+</style>
+</head>
+<body>
+
+<!-- PIN SCREEN -->
+<div id="pin-screen">
+  <div id="pin-box">
+    <div class="logo">🏡</div>
+    <h1>Lar & Vida</h1>
+    <p>Digite o PIN de acesso</p>
+    <div id="pin-dots">
+      <div class="dot" id="d0"></div>
+      <div class="dot" id="d1"></div>
+      <div class="dot" id="d2"></div>
+      <div class="dot" id="d3"></div>
+    </div>
+    <div id="pin-err"></div>
+    <div id="keypad"></div>
+  </div>
+</div>
+
+<!-- APP -->
+<div id="app">
+  <header>
+    <div>
+      <div class="h-title">Lar & Vida</div>
+      <div class="h-sub" id="h-month"></div>
+    </div>
+    <div class="h-right" id="h-right"></div>
+  </header>
+  <div id="content"></div>
+  <nav id="nav"></nav>
+</div>
+
+<!-- OVERLAY + SHEET -->
+<div id="overlay" onclick="closeSheet()"></div>
+<div id="sheet"></div>
+
+<!-- TOAST -->
+<div id="toast"></div>
+
+<script>
+// ═══════════════════════════════════════════════════════════
+// CONSTANTS
+// ═══════════════════════════════════════════════════════════
+const CATS=[
+  {id:'alimentacao',label:'Alimentação',icon:'🛒',color:'#C5820A'},
+  {id:'moradia',    label:'Moradia',    icon:'🏠',color:'#3A72A8'},
+  {id:'transporte', label:'Transporte', icon:'🚗',color:'#4A865A'},
+  {id:'saude',      label:'Saúde',      icon:'💊',color:'#C14B2A'},
+  {id:'educacao',   label:'Educação',   icon:'📚',color:'#7060B0'},
+  {id:'lazer',      label:'Lazer',      icon:'🎭',color:'#B0508A'},
+  {id:'vestuario',  label:'Vestuário',  icon:'👕',color:'#1A9A90'},
+  {id:'outros',     label:'Outros',     icon:'📦',color:'#8A8A8A'},
+];
+const MONTHS=['Janeiro','Fevereiro','Março','Abril','Maio','Junho',
+              'Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+const DNAMES=['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
+const DFULL=['Domingo','Segunda','Terça','Quarta','Quinta','Sexta','Sábado'];
+const NPALS=[
+  {bg:'#FFFBDC',bdr:'#E8D840'},{bg:'#E6F5E8',bdr:'#6AB87A'},
+  {bg:'#F0E8F8',bdr:'#B080D8'},{bg:'#E2EEF8',bdr:'#6A9ED0'},
+  {bg:'#FDEAE4',bdr:'#D07060'},
+];
+
+// ═══════════════════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════════════════
+const NOW=new Date();
+const S={
+  tab:'financas', weekOff:0,
+  orc:5000, tx:[], ev:[], si:[], ph:{}, nt:[],
+  unames:['Você','Cônjuge'], pin:'1234',
+  syncUrl:'', syncPass:'', claudeKey:'',
+};
+
+// ═══════════════════════════════════════════════════════════
+// STORAGE
+// ═══════════════════════════════════════════════════════════
+function lsGet(k,d){try{const v=localStorage.getItem(k);return v!==null?JSON.parse(v):d}catch{return d}}
+function lsSet(k,v){localStorage.setItem(k,JSON.stringify(v))}
+
+function loadAll(){
+  S.orc=lsGet('orc',5000); S.tx=lsGet('tx',[]); S.ev=lsGet('ev',[]);
+  S.si=lsGet('si',[]); S.ph=lsGet('ph',{}); S.nt=lsGet('nt',[]);
+  S.unames=lsGet('un',['Você','Cônjuge']); S.pin=lsGet('pin','1234');
+  S.syncUrl=lsGet('syncUrl',''); S.syncPass=lsGet('syncPass','');
+  S.claudeKey=lsGet('claudeKey','');
+}
+
+function persist(key,val){
+  lsSet(key,val);
+  queueSync(key,val);
+}
+
+// ═══════════════════════════════════════════════════════════
+// SYNC
+// ═══════════════════════════════════════════════════════════
+let syncQ={}, syncTimer=null, syncing=false;
+const DATA_KEYS=['orc','tx','ev','si','ph','nt','un'];
+
+function queueSync(key,val){
+  if(!DATA_KEYS.includes(key))return;
+  syncQ[key]={val:JSON.stringify(val),ts:Date.now()};
+  clearTimeout(syncTimer);
+  syncTimer=setTimeout(flushSync,2500);
+}
+
+async function flushSync(){
+  if(syncing||!S.syncUrl||!S.syncPass||!navigator.onLine)return;
+  const q={...syncQ};
+  if(!Object.keys(q).length)return;
+  syncing=true; setSyncIcon('⏫');
+  try{
+    const fd=new URLSearchParams();
+    fd.append('p',S.syncPass);fd.append('a','push');fd.append('d',JSON.stringify(q));
+    const r=await fetch(S.syncUrl,{method:'POST',body:fd,redirect:'follow'});
+    const data=await r.json();
+    if(data.ok){syncQ={};setSyncIcon('✓');lsSet('lastSync',Date.now());}
+    else setSyncIcon('⚠');
+  }catch{setSyncIcon('⚠');}
+  syncing=false;
+}
+
+async function pullSync(){
+  if(!S.syncUrl||!S.syncPass||!navigator.onLine)return;
+  setSyncIcon('⏬');
+  try{
+    const r=await fetch(`${S.syncUrl}?a=pull&p=${encodeURIComponent(S.syncPass)}`,{redirect:'follow'});
+    const data=await r.json();
+    if(data.ok&&data.d){
+      for(const[k,{val,ts}]of Object.entries(data.d)){
+        const localTs=lsGet('ts_'+k,0);
+        if(ts>localTs){localStorage.setItem(k,val);lsSet('ts_'+k,ts);}
+      }
+      loadAll(); render(); setSyncIcon('✓'); toast('Dados sincronizados ✓');
+    }
+  }catch{setSyncIcon('⚠');}
+}
+
+function setSyncIcon(ico){
+  const el=document.getElementById('sync-btn');
+  if(el)el.textContent=ico;
+}
+
+// ═══════════════════════════════════════════════════════════
+// HELPERS
+// ═══════════════════════════════════════════════════════════
+const fmt=n=>n.toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
+const fmtS=n=>`R$ ${n.toFixed(2).replace('.',',')}`;
+const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,6);
+function toDS(d){return`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`}
+const TODAY=toDS(NOW);
+
+function getWeekDays(off=0){
+  const b=new Date(NOW);
+  b.setDate(b.getDate()-b.getDay()+off*7);
+  return Array.from({length:7},(_,i)=>new Date(b.getFullYear(),b.getMonth(),b.getDate()+i));
+}
+function getEst(name){
+  const k=name.toLowerCase().trim();
+  if(S.ph[k])return S.ph[k];
+  const h=Object.keys(S.ph).find(p=>p.includes(k)||k.includes(p));
+  return h?S.ph[h]:null;
+}
+function monthTx(){
+  return S.tx.filter(t=>{const d=new Date(t.date);return d.getMonth()===NOW.getMonth()&&d.getFullYear()===NOW.getFullYear();});
+}
+function toast(msg){
+  const el=document.getElementById('toast');
+  el.textContent=msg;el.style.display='block';
+  setTimeout(()=>el.style.display='none',2200);
+}
+
+// ═══════════════════════════════════════════════════════════
+// PIN SCREEN
+// ═══════════════════════════════════════════════════════════
+let pinInput='';
+function buildKeypad(){
+  const kp=document.getElementById('keypad');
+  const nums=['1','2','3','4','5','6','7','8','9','','0','⌫'];
+  kp.innerHTML=nums.map(n=>{
+    if(n==='')return`<div></div>`;
+    return`<button class="kbtn${n==='⌫'?' del':''}" onclick="pinKey('${n}')">${n}</button>`;
+  }).join('');
+}
+function pinKey(k){
+  if(k==='⌫'){pinInput=pinInput.slice(0,-1);}
+  else if(pinInput.length<4){pinInput+=k;}
+  updateDots();
+  if(pinInput.length===4)setTimeout(checkPin,80);
+}
+function updateDots(){
+  for(let i=0;i<4;i++){
+    const d=document.getElementById('d'+i);
+    d.className='dot'+(i<pinInput.length?' filled':'');
+  }
+}
+function checkPin(){
+  if(pinInput===S.pin){
+    document.getElementById('pin-screen').style.display='none';
+    document.getElementById('app').style.display='block';
+    render();
+    if(S.syncUrl&&S.syncPass)pullSync();
+    window.addEventListener('online',()=>{flushSync();pullSync();});
+  }else{
+    document.getElementById('pin-err').textContent='PIN incorreto. Tente novamente.';
+    pinInput='';updateDots();
+    setTimeout(()=>document.getElementById('pin-err').textContent='',1500);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+// RENDER ENGINE
+// ═══════════════════════════════════════════════════════════
+function render(){
+  renderHeader();
+  renderNav();
+  const el=document.getElementById('content');
+  el.innerHTML='';
+  if(S.tab==='financas')renderFinancas(el);
+  else if(S.tab==='agenda')renderAgenda(el);
+  else if(S.tab==='compras')renderCompras(el);
+  else if(S.tab==='notas')renderNotas(el);
+}
+
+function renderHeader(){
+  document.getElementById('h-month').textContent=`${MONTHS[NOW.getMonth()]} ${NOW.getFullYear()}`;
+  document.getElementById('h-right').innerHTML=
+    `<span class="badge badge-r">${S.unames[0]}</span>`+
+    `<span class="badge badge-g">${S.unames[1]}</span>`+
+    `<button id="sync-btn" onclick="openSettings()" title="Configurações e sincronização">⚙</button>`;
+  if(S.syncUrl)setSyncIcon(lsGet('lastSync',0)?'✓':'○');
+}
+
+function renderNav(){
+  const tabs=[{id:'financas',ico:'💰',lbl:'Finanças'},{id:'agenda',ico:'📅',lbl:'Agenda'},
+              {id:'compras',ico:'🛒',lbl:'Compras'},{id:'notas',ico:'📝',lbl:'Notas'}];
+  document.getElementById('nav').innerHTML=tabs.map(t=>
+    `<button class="nb${S.tab===t.id?' on':''}" onclick="goTab('${t.id}')">
+      <span class="nb-ico">${t.ico}</span><span>${t.lbl}</span>
+      ${S.tab===t.id?'<div class="nb-bar"></div>':''}
+    </button>`
+  ).join('');
+}
+
+function goTab(id){S.tab=id;render();}
+
+// ═══════════════════════════════════════════════════════════
+// FINANÇAS TAB
+// ═══════════════════════════════════════════════════════════
+function renderFinancas(el){
+  const mx=monthTx();
+  const spent=mx.reduce((s,t)=>s+t.amount,0);
+  const pct=S.orc>0?Math.min(100,(spent/S.orc)*100):0;
+  const rem=S.orc-spent;
+  const barC=pct>90?'var(--pri)':pct>70?'var(--amb)':'var(--grn)';
+
+  const catTots=CATS.map(c=>({...c,v:mx.filter(t=>t.category===c.id).reduce((s,t)=>s+t.amount,0)})).filter(c=>c.v>0);
+  const total=catTots.reduce((s,c)=>s+c.v,0);
+
+  let html=`
+  <div class="card c-pad mb12">
+    <div class="row mb14">
+      <div>
+        <div style="font-size:11px;color:var(--txl);margin-bottom:2px">Orçamento mensal</div>
+        <div style="font-size:24px;font-weight:700;color:var(--txt)">${fmt(S.orc)}</div>
+      </div>
+      <button class="btn btn-sm" style="background:var(--pris);color:var(--pri);border:none" onclick="openEditOrc()">Editar</button>
+    </div>
+    <div class="row mb8">
+      <div><div style="font-size:11px;color:var(--txl)">Gasto</div><div style="font-size:15px;font-weight:700;color:${pct>90?'var(--pri)':'var(--txm)'}">${fmt(spent)}</div></div>
+      <div style="text-align:right"><div style="font-size:11px;color:var(--txl)">Restante</div><div style="font-size:15px;font-weight:700;color:${rem<0?'var(--pri)':'var(--grn)'}">${fmt(rem)}</div></div>
+    </div>
+    <div class="prog-wrap"><div class="prog-bar" style="width:${pct.toFixed(1)}%;background:${barC}"></div></div>
+    <div style="font-size:11px;color:var(--txl);margin-top:4px">${pct.toFixed(0)}% utilizado</div>
+  </div>`;
+
+  if(catTots.length){
+    html+=`<div class="card c-pad mb12">
+      <div style="font-size:12px;font-weight:600;color:var(--txm);margin-bottom:10px">Distribuição por categoria</div>
+      <div id="chart-wrap">
+        <canvas id="donut" width="140" height="140"></canvas>
+        <div id="chart-legend">${catTots.map(c=>`
+          <div class="leg-row">
+            <div class="leg-dot" style="background:${c.color}"></div>
+            <span>${c.label}</span><span style="margin-left:auto;font-weight:600">${fmt(c.v)}</span>
+          </div>`).join('')}
+        </div>
+      </div>
+    </div>`;
+  }
+
+  html+=`<div class="row mb12" style="align-items:center">
+    <div style="font-size:12px;font-weight:600;color:var(--txm)">Lançamentos do mês</div>
+    <button class="btn btn-pri btn-sm" onclick="openAddTx()">+ Adicionar</button>
+  </div>`;
+
+  if(!mx.length){
+    html+=`<div class="card empty"><div class="empty-ico">💸</div><div class="empty-txt">Nenhum lançamento esse mês</div></div>`;
+  }else{
+    [...mx].reverse().slice(0,15).forEach(t=>{
+      const c=CATS.find(c=>c.id===t.category)||CATS[7];
+      const who=t.user==='u1'?S.unames[0]:t.user==='u2'?S.unames[1]:'Ambos';
+      html+=`<div class="card item-row">
+        <div class="item-ico" style="background:${c.color}22">${c.icon}</div>
+        <div style="flex:1"><div class="item-name">${t.label||c.label}</div><div class="item-sub">${c.label} · ${who}</div></div>
+        <div style="font-size:14px;font-weight:700;color:var(--pri)">−${fmt(t.amount)}</div>
+        <button class="x-btn" onclick="removeTx('${t.id}')">×</button>
+      </div>`;
+    });
+  }
+
+  el.innerHTML=html;
+  if(catTots.length)drawDonut(catTots,total);
+}
+
+function drawDonut(cats,total){
+  const cv=document.getElementById('donut');
+  if(!cv)return;
+  const ctx=cv.getContext('2d');
+  const cx=70,cy=70,R=54,r=32;
+  ctx.clearRect(0,0,140,140);
+  // Background ring
+  ctx.beginPath();ctx.arc(cx,cy,R,0,2*Math.PI);
+  ctx.arc(cx,cy,r,2*Math.PI,0,true);
+  ctx.fillStyle='#F3EDE2';ctx.fill();
+  let ang=-Math.PI/2;
+  cats.forEach(c=>{
+    const sweep=(c.v/total)*2*Math.PI;
+    ctx.beginPath();
+    ctx.arc(cx,cy,R,ang,ang+sweep);
+    ctx.arc(cx,cy,r,ang+sweep,ang,true);
+    ctx.closePath();ctx.fillStyle=c.color;ctx.fill();
+    ang+=sweep;
+  });
+  ctx.fillStyle='#1C1208';ctx.font='bold 11px system-ui';
+  ctx.textAlign='center';ctx.textBaseline='middle';
+  ctx.fillText(fmt(total),cx,cy);
+}
+
+function openEditOrc(){
+  sheet(`<div class="sheet-drag"></div><div class="sheet-title">Orçamento mensal</div>
+    <div class="f-group"><label class="f-label">Valor total (R$)</label>
+    <input class="f-inp" id="orc-inp" type="number" value="${S.orc}" placeholder="5000"></div>
+    <button class="btn btn-pri btn-full" onclick="saveOrc()">Salvar</button>
+  `);
+}
+function saveOrc(){
+  const v=parseFloat(document.getElementById('orc-inp').value);
+  if(v>0){S.orc=v;persist('orc',v);closeSheet();render();}
+}
+
+function openAddTx(){
+  let selCat='alimentacao',selUser='u1';
+  sheet(`<div class="sheet-drag"></div><div class="sheet-title">Novo lançamento</div>
+    <div class="f-group"><label class="f-label">Valor (R$)</label>
+    <input class="f-inp" id="tx-amt" type="number" placeholder="0,00"></div>
+    <div class="f-group"><label class="f-label">Descrição</label>
+    <input class="f-inp" id="tx-lbl" placeholder="Mercado, farmácia, conta de luz…"></div>
+    <div class="f-group"><label class="f-label">Categoria</label>
+    <div class="cat-grid" id="cat-grid">${CATS.map(c=>`
+      <button class="cat-btn${c.id===selCat?' on':''}" id="cb-${c.id}"
+        style="${c.id===selCat?'color:'+c.color+';border-color:'+c.color:''}"
+        onclick="pickCat('${c.id}','${c.color}')">
+        <div class="cat-ico">${c.icon}</div>
+        <div class="cat-lbl">${c.label.split(' ')[0]}</div>
+      </button>`).join('')}
+    </div></div>
+    <div class="f-group"><label class="f-label">Quem gastou?</label>
+    <div class="up-row">
+      <button class="up-btn on-r" id="up-u1" onclick="pickUser('u1')">${S.unames[0]}</button>
+      <button class="up-btn" id="up-u2" onclick="pickUser('u2')">${S.unames[1]}</button>
+    </div></div>
+    <button class="btn btn-pri btn-full" onclick="saveTx()">Salvar lançamento</button>
+  `);
+}
+window.pickCat=function(id,color){
+  document.querySelectorAll('.cat-btn').forEach(b=>{b.classList.remove('on');b.style.color='';b.style.borderColor='';});
+  const b=document.getElementById('cb-'+id);
+  if(b){b.classList.add('on');b.style.color=color;b.style.borderColor=color;}
+  window._selCat=id;
+};
+window.pickUser=function(id){
+  ['u1','u2'].forEach(u=>{
+    const b=document.getElementById('up-'+u);
+    if(b){b.className='up-btn'+(u===id?' on-r':'');}
+  });
+  window._selUser=id;
+};
+window._selCat='alimentacao'; window._selUser='u1';
+function saveTx(){
+  const v=parseFloat(document.getElementById('tx-amt').value);
+  const lbl=document.getElementById('tx-lbl').value.trim();
+  if(!v||v<=0)return;
+  const t={id:uid(),amount:v,category:window._selCat||'outros',label:lbl,user:window._selUser||'u1',date:new Date().toISOString()};
+  S.tx.push(t);persist('tx',S.tx);closeSheet();render();toast('Lançamento salvo ✓');
+}
+function removeTx(id){
+  S.tx=S.tx.filter(t=>t.id!==id);persist('tx',S.tx);render();
+}
+
+// ═══════════════════════════════════════════════════════════
+// AGENDA TAB
+// ═══════════════════════════════════════════════════════════
+function renderAgenda(el){
+  const days=getWeekDays(S.weekOff);
+  const wlbl=S.weekOff===0?'Esta semana':S.weekOff===1?'Próxima semana':S.weekOff===-1?'Semana passada':`${days[0].getDate()}/${days[0].getMonth()+1}`;
+
+  let html=`<div class="card c-pad mb14">
+    <div class="week-nav">
+      <button class="wn-btn" onclick="S.weekOff--;render()">←</button>
+      <span class="wn-lbl">${wlbl}</span>
+      <button class="wn-btn" onclick="S.weekOff++;render()">→</button>
+    </div>
+    <div class="week-grid">`;
+
+  days.forEach((d,i)=>{
+    const ds=toDS(d);
+    const isT=ds===TODAY;
+    const hasDot=S.ev.some(e=>e.date===ds);
+    html+=`<button class="day-btn${isT?' today':''}" onclick="openAddEv('${ds}')">
+      <div class="day-name">${DNAMES[i]}</div>
+      <div class="day-num">${d.getDate()}</div>
+      ${hasDot?`<div class="day-dot"></div>`:''}
+    </button>`;
+  });
+  html+=`</div></div>`;
+
+  html+=`<div class="row mb12"><div style="font-size:12px;font-weight:600;color:var(--txm)">Compromissos</div>
+    <button class="btn btn-pri btn-sm" onclick="openAddEv('${TODAY}')">+ Novo</button></div>`;
+
+  let anyEv=false;
+  days.forEach((d,i)=>{
+    const ds=toDS(d);
+    const devs=S.ev.filter(e=>e.date===ds).sort((a,b)=>(a.time||'').localeCompare(b.time||''));
+    if(!devs.length)return;
+    anyEv=true;
+    const isT=ds===TODAY;
+    html+=`<div class="day-section">
+      <div class="day-section-hdr">${isT?'<span class="today-tag">Hoje</span>':''}${DFULL[d.getDay()]}, ${d.getDate()} de ${MONTHS[d.getMonth()]}</div>`;
+    devs.forEach(ev=>{
+      const uc=ev.user==='u1'?'var(--pri)':ev.user==='u2'?'var(--grn)':'var(--amb)';
+      const who=ev.user==='u1'?S.unames[0]:ev.user==='u2'?S.unames[1]:'Ambos';
+      html+=`<div class="card ev-card">
+        <div class="ev-line" style="background:${uc}"></div>
+        <div style="flex:1">
+          <div class="item-name">${ev.title}</div>
+          <div class="item-sub">${ev.time?ev.time+' · ':''}${who}</div>
+        </div>
+        <button class="x-btn" onclick="removeEv('${ev.id}')">×</button>
+      </div>`;
+    });
+    html+=`</div>`;
+  });
+
+  if(!anyEv)html+=`<div class="card empty"><div class="empty-ico">📅</div>
+    <div class="empty-txt">Nenhum compromisso essa semana</div>
+    <div class="empty-sub">Toque num dia para adicionar</div></div>`;
+
+  el.innerHTML=html;
+}
+
+function openAddEv(date=''){
+  window._evDate=date||TODAY;
+  sheet(`<div class="sheet-drag"></div><div class="sheet-title">Novo compromisso</div>
+    <div class="f-group"><label class="f-label">Título</label>
+    <input class="f-inp" id="ev-title" placeholder="Consulta, reunião, aniversário…"></div>
+    <div class="f-group"><label class="f-label">Data</label>
+    <input class="f-inp" id="ev-date" type="date" value="${window._evDate}"></div>
+    <div class="f-group"><label class="f-label">Horário (opcional)</label>
+    <input class="f-inp" id="ev-time" type="time"></div>
+    <div class="f-group"><label class="f-label">Quem?</label>
+    <div class="up-row">
+      <button class="up-btn on-r" id="evup-u1" onclick="pickEvUser('u1')">${S.unames[0]}</button>
+      <button class="up-btn" id="evup-u2" onclick="pickEvUser('u2')">${S.unames[1]}</button>
+      <button class="up-btn" id="evup-both" onclick="pickEvUser('both')">Ambos</button>
+    </div></div>
+    <button class="btn btn-pri btn-full" onclick="saveEv()">Salvar compromisso</button>
+  `);
+  window._evUser='u1';
+}
+window.pickEvUser=function(id){
+  ['u1','u2','both'].forEach(u=>{
+    const b=document.getElementById('evup-'+u);
+    if(b)b.className='up-btn'+(u===id?' on-r':'');
+  });
+  window._evUser=id;
+};
+function saveEv(){
+  const title=document.getElementById('ev-title').value.trim();
+  const date=document.getElementById('ev-date').value;
+  const time=document.getElementById('ev-time').value;
+  if(!title||!date)return;
+  S.ev.push({id:uid(),title,date,time,user:window._evUser||'u1'});
+  persist('ev',S.ev);closeSheet();render();toast('Compromisso salvo ✓');
+}
+function removeEv(id){S.ev=S.ev.filter(e=>e.id!==id);persist('ev',S.ev);render();}
+
+// ═══════════════════════════════════════════════════════════
+// COMPRAS TAB
+// ═══════════════════════════════════════════════════════════
+function renderCompras(el){
+  const pending=S.si.filter(i=>!i.checked);
+  const done=S.si.filter(i=>i.checked);
+  const totalEst=pending.reduce((s,i)=>{
+    const est=i.estPrice||getEst(i.name)||0;
+    return s+(est*(i.qty||1));
+  },0);
+  const mx=monthTx();
+  const spent=mx.reduce((s,t)=>s+t.amount,0);
+  const rem=S.orc-spent;
+  const over=totalEst>rem&&totalEst>0;
+
+  let html=`<div class="card c-pad mb12">
+    <div id="shop-summary">
+      <div class="sum-col"><div class="sum-lbl">Estimativa da lista</div><div class="sum-val" style="color:var(--amb)">${fmt(totalEst)}</div></div>
+      <div style="width:1px;background:var(--brd)"></div>
+      <div class="sum-col"><div class="sum-lbl">Disponível</div><div class="sum-val" style="color:${over?'var(--pri)':'var(--grn)'}">${fmt(rem)}</div></div>
+    </div>
+    ${over?`<div class="warn-box">⚠️ Estimativa supera o disponível em ${fmt(totalEst-rem)}</div>`:''}
+  </div>
+  <div style="display:flex;gap:8px;margin-bottom:14px">
+    <div style="flex:1"><button class="btn btn-pri btn-full" onclick="openAddItem()">+ Adicionar item</button></div>
+    <button style="background:var(--grns);color:var(--grn);border:1px solid #4A865A40;border-radius:12px;padding:0 14px;cursor:pointer;font-size:20px" onclick="openScan()" title="Escanear nota fiscal">📷</button>
+  </div>`;
+
+  if(!S.si.length){
+    html+=`<div class="card empty"><div class="empty-ico">🛒</div><div class="empty-txt">Lista vazia</div><div class="empty-sub">Adicione itens acima</div></div>`;
+  }else{
+    pending.forEach(item=>{
+      const est=item.estPrice||getEst(item.name);
+      html+=`<div class="card item-row">
+        <button class="check-box" onclick="toggleItem('${item.id}')"></button>
+        <div style="flex:1">
+          <div class="item-name">${item.name}</div>
+          <div class="item-sub">Qtd: ${item.qty}${est?' · Est. '+fmtS(est*item.qty):' · sem preço no histórico'}</div>
+        </div>
+        <button class="x-btn" onclick="removeItem('${item.id}')">×</button>
+      </div>`;
+    });
+    if(done.length){
+      html+=`<div class="shop-done-hdr">✓ Já comprado</div>`;
+      done.forEach(item=>{
+        html+=`<div class="card item-row" style="opacity:.55">
+          <button class="check-box done" onclick="toggleItem('${item.id}')">✓</button>
+          <div style="flex:1;font-size:13px;color:var(--txm);text-decoration:line-through">${item.name} ×${item.qty}</div>
+          <button class="x-btn" onclick="removeItem('${item.id}')">×</button>
+        </div>`;
+      });
+    }
+  }
+  el.innerHTML=html;
+}
+
+function openAddItem(){
+  sheet(`<div class="sheet-drag"></div><div class="sheet-title">Adicionar item</div>
+    <div class="f-group"><label class="f-label">Nome</label>
+    <input class="f-inp" id="si-name" placeholder="Arroz, leite, detergente…" oninput="showEstHint()"></div>
+    <div id="est-hint" style="margin-bottom:10px"></div>
+    <div class="f-group"><label class="f-label">Quantidade</label>
+    <input class="f-inp" id="si-qty" type="number" value="1" placeholder="1"></div>
+    <button class="btn btn-pri btn-full" onclick="saveItem()">Adicionar à lista</button>
+  `);
+}
+window.showEstHint=function(){
+  const name=document.getElementById('si-name')?.value||'';
+  const est=getEst(name);
+  const el=document.getElementById('est-hint');
+  if(!el)return;
+  el.innerHTML=est?`<div style="background:var(--grns);color:var(--grn);border-radius:8px;padding:7px 12px;font-size:12px">💡 Preço estimado: ${fmtS(est)} (do histórico)</div>`:'';
+};
+function saveItem(){
+  const name=document.getElementById('si-name').value.trim();
+  const qty=parseInt(document.getElementById('si-qty').value)||1;
+  if(!name)return;
+  S.si.push({id:uid(),name,qty,estPrice:getEst(name),checked:false});
+  persist('si',S.si);closeSheet();render();toast('Item adicionado ✓');
+}
+function toggleItem(id){S.si=S.si.map(i=>i.id===id?{...i,checked:!i.checked}:i);persist('si',S.si);render();}
+function removeItem(id){S.si=S.si.filter(i=>i.id!==id);persist('si',S.si);render();}
+
+// ─── SCANNER ───
+let _scanFile=null;
+function openScan(){
+  sheet(`<div class="sheet-drag"></div><div class="sheet-title">Escanear nota fiscal</div>
+    <div id="scan-body">
+      ${!S.claudeKey?`<div style="background:var(--ambs);color:var(--amb);border-radius:8px;padding:8px 12px;font-size:12px;margin-bottom:12px">⚠️ Configure a chave do OpenRouter em Configurações para usar este recurso.</div>`:''}
+      <div style="display:flex;gap:10px;margin-bottom:14px">
+        <button class="btn btn-pri" style="flex:1;font-size:13px" onclick="document.getElementById('scan-cam').click()">📷 Tirar foto</button>
+        <button class="btn btn-sec" style="flex:1;font-size:13px;border-color:var(--brd);color:var(--txm)" onclick="document.getElementById('scan-gal').click()">🖼 Galeria</button>
+      </div>
+      <input type="file" id="scan-cam" accept="image/*" capture="environment" style="display:none" onchange="onScanFile(event)">
+      <input type="file" id="scan-gal" accept="image/*" style="display:none" onchange="onScanFile(event)">
+      <div style="font-size:12px;color:var(--txl);text-align:center;margin-bottom:14px">Aponte para a nota fiscal ou cupom. Foto nítida e bem iluminada.</div>
+      <div id="scan-err" style="color:var(--pri);font-size:12px;margin-bottom:10px"></div>
+      <button class="btn btn-sec btn-full" onclick="closeSheet()">Cancelar</button>
+    </div>
+  `);
+}
+
+async function compressImage(file){
+  return new Promise(res=>{
+    const img=new Image();
+    const url=URL.createObjectURL(file);
+    img.onload=()=>{
+      const MAX=1200;
+      let w=img.width,h=img.height;
+      if(w>MAX||h>MAX){if(w>h){h=Math.round(h*MAX/w);w=MAX;}else{w=Math.round(w*MAX/h);h=MAX;}}
+      const cv=document.createElement('canvas');
+      cv.width=w;cv.height=h;
+      cv.getContext('2d').drawImage(img,0,0,w,h);
+      URL.revokeObjectURL(url);
+      res(cv.toDataURL('image/jpeg',0.82).split(',')[1]);
+    };
+    img.onerror=()=>{URL.revokeObjectURL(url);res(null);};
+    img.src=url;
+  });
+}
+
+function extractJSON(txt){
+  try{return JSON.parse(txt.trim());}catch{}
+  const m=txt.match(/```(?:json)?\s*([\s\S]*?)```/);
+  if(m)try{return JSON.parse(m[1].trim());}catch{}
+  const o=txt.match(/\{[\s\S]*\}/);
+  if(o)try{return JSON.parse(o[0]);}catch{}
+  throw new Error('JSON não encontrado na resposta');
+}
+
+window.onScanFile=async function(e){
+  const file=e.target.files[0];
+  if(!file)return;
+  if(!S.claudeKey){document.getElementById('scan-err').textContent='Configure a chave do Gemini em Configurações.';return;}
+  document.getElementById('scan-body').innerHTML=`<div style="text-align:center;padding:28px"><div style="font-size:36px;margin-bottom:12px">🔍</div><div style="font-size:14px;color:var(--txm);font-weight:500">Analisando a nota…</div><div style="font-size:12px;color:var(--txl);margin-top:4px">Comprimindo e enviando imagem</div></div>`;
+  try{
+    const b64=await compressImage(file);
+    if(!b64)throw new Error('Não foi possível processar a imagem');
+    if(!S.syncUrl||!S.syncPass)throw new Error('Configure o link e a senha do Apps Script nas Configurações para usar o escaneamento.');
+    const fd=new URLSearchParams();
+    fd.append('p',S.syncPass);
+    fd.append('a','scan');
+    fd.append('img',b64);
+    fd.append('mime','image/jpeg');
+    fd.append('k',S.claudeKey);
+    const resp=await fetch(S.syncUrl,{method:'POST',body:fd,redirect:'follow'});
+    const rawText=await resp.text();
+    let data;
+    try{ data=JSON.parse(rawText); }
+    catch(e){ throw new Error('Servidor retornou resposta inválida: '+rawText.slice(0,300)); }
+    if(!data.ok){throw new Error(data.error||'Erro no servidor');}
+    const txt=data.result||'';
+    if(!txt)throw new Error('Resposta vazia da API');
+    const result=extractJSON(txt);
+    showScanResult(result);
+  }catch(err){
+    const msg=err.message||'Erro desconhecido';
+    document.getElementById('scan-body').innerHTML=
+      `<div style="background:#FEE8E3;border-radius:10px;padding:14px;margin-bottom:14px;font-size:13px;color:var(--pri)">
+        <div style="font-weight:600;margin-bottom:4px">Não foi possível ler a nota</div>
+        <div style="font-size:11px;color:var(--txm)">${msg}</div>
+      </div>
+      <div style="font-size:12px;color:var(--txl);margin-bottom:14px">Dicas: foto reta, boa iluminação, nota sem dobras, todos os itens visíveis.</div>
+      <button class="btn btn-pri btn-full" onclick="openScan()" style="margin-bottom:8px">Tentar novamente</button>
+      <button class="btn btn-sec btn-full" onclick="closeSheet()">Cancelar</button>`;
+  }
+};
+function showScanResult(r){
+  const rows=r.items?.map(i=>`<div style="display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--brds);font-size:13px"><span style="color:var(--txt)">${i.name} <span style="color:var(--txl)">×${i.quantity||1}</span></span><span style="color:var(--txm);font-weight:500">${fmtS(i.price)}</span></div>`).join('')||'';
+  document.getElementById('scan-body').innerHTML=`
+    <div style="background:var(--grns);border-radius:10px;padding:12px;margin-bottom:12px">
+      <div style="font-size:13px;font-weight:600;color:var(--grn)">✓ Nota lida com sucesso!</div>
+      <div style="font-size:12px;color:var(--txm);margin-top:3px">${r.store} · Total: ${fmt(r.total||0)}</div>
+    </div>
+    <div style="margin-bottom:14px">${rows}</div>
+    <div style="font-size:12px;color:var(--txl);margin-bottom:14px">💡 Os preços serão salvos no histórico para melhorar estimativas futuras.</div>
+    <button class="btn btn-grn btn-full" onclick="applyScan(${JSON.stringify(r).split('"').join("'")})">Salvar preços no histórico</button>
+  `;
+}
+window.applyScan=function(r){
+  // r was stringified with single quotes, reconstruct
+  const newPH={...S.ph};
+  (r.items||[]).forEach(item=>{
+    const k=item.name.toLowerCase().trim();
+    newPH[k]=S.ph[k]?(S.ph[k]*0.6+item.price*0.4):item.price;
+  });
+  S.ph=newPH;persist('ph',S.ph);closeSheet();toast('Preços salvos ✓');render();
+};
+
+// ═══════════════════════════════════════════════════════════
+// NOTAS TAB
+// ═══════════════════════════════════════════════════════════
+function renderNotas(el){
+  let html=`<div class="row mb14">
+    <div style="font-size:17px;font-weight:700;color:var(--txt)">Anotações</div>
+    <button class="btn btn-pri btn-sm" onclick="openAddNote()">+ Nova nota</button>
+  </div>`;
+
+  if(!S.nt.length){
+    html+=`<div class="card empty"><div class="empty-ico">📝</div><div class="empty-txt">Nenhuma anotação ainda</div></div>`;
+  }else{
+    html+=`<div id="notes-grid">`;
+    [...S.nt].reverse().forEach(n=>{
+      const p=NPALS[n.pal||0];
+      const d=new Date(n.date);
+      const who=n.user==='u1'?S.unames[0]:S.unames[1];
+      html+=`<div class="note-card" style="background:${p.bg};border-color:${p.bdr}">
+        <button class="note-x" style="color:${p.bdr}" onclick="removeNote('${n.id}')">×</button>
+        ${n.title?`<div class="note-xtitle">${n.title}</div>`:''}
+        <div class="note-body">${n.body}</div>
+        <div class="note-foot">${d.getDate()}/${d.getMonth()+1} · ${who}</div>
+      </div>`;
+    });
+    html+=`</div>`;
+  }
+  el.innerHTML=html;
+}
+
+function openAddNote(){
+  window._pal=0;
+  const palBtns=NPALS.map((p,i)=>`<button class="pal-btn" id="palb-${i}" style="background:${p.bg};border-color:${i===0?p.bdr:'transparent'}" onclick="pickPal(${i},'${p.bdr}')"></button>`).join('');
+  sheet(`<div class="sheet-drag"></div><div class="sheet-title">Nova anotação</div>
+    <div class="f-group"><label class="f-label">Título (opcional)</label>
+    <input class="f-inp" id="nt-title" placeholder="Ideia, lembrete, recado…"></div>
+    <div class="f-group"><label class="f-label">Anotação</label>
+    <textarea class="f-inp" id="nt-body" placeholder="Escreva aqui…"></textarea></div>
+    <div class="f-group"><label class="f-label">Cor</label>
+    <div class="pal-row" id="pal-row">${palBtns}</div></div>
+    <div class="f-group"><label class="f-label">Quem?</label>
+    <div class="up-row">
+      <button class="up-btn on-r" id="ntup-u1" onclick="pickNtUser('u1')">${S.unames[0]}</button>
+      <button class="up-btn" id="ntup-u2" onclick="pickNtUser('u2')">${S.unames[1]}</button>
+    </div></div>
+    <button class="btn btn-pri btn-full" onclick="saveNote()">Salvar nota</button>
+  `);
+  window._ntUser='u1';
+}
+window.pickPal=function(i,bdr){
+  NPALS.forEach((_,j)=>{
+    const b=document.getElementById('palb-'+j);
+    if(b)b.style.borderColor=j===i?bdr:'transparent';
+  });
+  window._pal=i;
+};
+window.pickNtUser=function(id){
+  ['u1','u2'].forEach(u=>{
+    const b=document.getElementById('ntup-'+u);
+    if(b)b.className='up-btn'+(u===id?' on-r':'');
+  });
+  window._ntUser=id;
+};
+function saveNote(){
+  const body=document.getElementById('nt-body').value.trim();
+  if(!body)return;
+  const title=document.getElementById('nt-title').value.trim();
+  S.nt.push({id:uid(),title,body,user:window._ntUser||'u1',pal:window._pal||0,date:new Date().toISOString()});
+  persist('nt',S.nt);closeSheet();render();toast('Nota salva ✓');
+}
+function removeNote(id){S.nt=S.nt.filter(n=>n.id!==id);persist('nt',S.nt);render();}
+
+// ═══════════════════════════════════════════════════════════
+// SETTINGS
+// ═══════════════════════════════════════════════════════════
+function openSettings(){
+  sheet(`<div class="sheet-drag"></div><div class="sheet-title">Configurações</div>
+    <div class="f-group"><label class="f-label">Seu nome</label>
+    <input class="f-inp" id="set-u1" value="${S.unames[0]}"></div>
+    <div class="f-group"><label class="f-label">Nome do(a) cônjuge</label>
+    <input class="f-inp" id="set-u2" value="${S.unames[1]}"></div>
+    <div class="f-group"><label class="f-label">PIN de acesso (4 dígitos)</label>
+    <input class="f-inp" id="set-pin" type="number" value="${S.pin}" maxlength="4" placeholder="1234"></div>
+    <div style="height:1px;background:var(--brd);margin:14px 0"></div>
+    <div style="font-size:12px;font-weight:600;color:var(--txm);margin-bottom:10px">Sincronização com Google Sheets</div>
+    <div class="f-group"><label class="f-label">URL do Google Apps Script</label>
+    <input class="f-inp" id="set-url" value="${S.syncUrl}" placeholder="https://script.google.com/macros/s/…/exec"></div>
+    <div class="f-group"><label class="f-label">Senha de sincronização</label>
+    <input class="f-inp" id="set-spass" type="password" value="${S.syncPass}" placeholder="A senha que você definiu no script"></div>
+    <div style="height:1px;background:var(--brd);margin:14px 0"></div>
+    <div style="font-size:12px;font-weight:600;color:var(--txm);margin-bottom:10px">Escaneamento de nota fiscal (opcional)</div>
+    <div class="f-group"><label class="f-label">Chave da API Hugging Face</label>
+    <input class="f-inp" id="set-ckey" type="password" value="${S.claudeKey}" placeholder="hf_…"></div>
+    <div style="font-size:11px;color:var(--txl);margin-bottom:14px">Gratuito em huggingface.co · Fica salva só no seu dispositivo</div>
+    <button class="btn btn-pri btn-full" onclick="saveSettings()" style="margin-bottom:10px">Salvar configurações</button>
+    ${S.syncUrl&&S.syncPass?`<button class="btn btn-sec btn-full" onclick="pullSync();closeSheet()">⏬ Sincronizar agora</button>`:''}
+  `);
+}
+function saveSettings(){
+  const u1=document.getElementById('set-u1').value.trim()||'Você';
+  const u2=document.getElementById('set-u2').value.trim()||'Cônjuge';
+  const pin=String(document.getElementById('set-pin').value).slice(0,4)||'1234';
+  const url=document.getElementById('set-url').value.trim();
+  const sp=document.getElementById('set-spass').value;
+  const ck=document.getElementById('set-ckey').value.trim();
+  S.unames=[u1,u2];S.pin=pin;S.syncUrl=url;S.syncPass=sp;S.claudeKey=ck;
+  lsSet('un',[u1,u2]);lsSet('pin',pin);lsSet('syncUrl',url);lsSet('syncPass',sp);lsSet('claudeKey',ck);
+  closeSheet();render();toast('Configurações salvas ✓');
+}
+
+// ═══════════════════════════════════════════════════════════
+// SHEET MODAL
+// ═══════════════════════════════════════════════════════════
+function sheet(html){
+  const s=document.getElementById('sheet');
+  const o=document.getElementById('overlay');
+  s.innerHTML=html;
+  s.style.display='block';o.style.display='block';
+  requestAnimationFrame(()=>{s.style.transform='translateY(0)';});
+}
+function closeSheet(){
+  document.getElementById('sheet').style.display='none';
+  document.getElementById('overlay').style.display='none';
+}
+
+// ═══════════════════════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════════════════════
+loadAll();
+buildKeypad();
+document.getElementById('h-month').textContent='';
+
+// Expose globals
+window.goTab=goTab;window.openAddTx=openAddTx;window.removeTx=removeTx;
+window.openEditOrc=openEditOrc;window.saveOrc=saveOrc;window.saveTx=saveTx;
+window.openAddEv=openAddEv;window.saveEv=saveEv;window.removeEv=removeEv;
+window.openAddItem=openAddItem;window.saveItem=saveItem;window.toggleItem=toggleItem;window.removeItem=removeItem;
+window.openScan=openScan;
+window.openAddNote=openAddNote;window.saveNote=saveNote;window.removeNote=removeNote;
+window.openSettings=openSettings;window.saveSettings=saveSettings;
+window.closeSheet=closeSheet;window.pullSync=pullSync;
+</script>
+</body>
+</html>
