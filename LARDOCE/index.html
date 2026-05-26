@@ -220,6 +220,16 @@ input:checked+.tslider:before{transform:translateX(18px)}
 
 /* ── DIVIDER ── */
 .divider{height:1px;background:var(--brd);margin:14px 0}
+.mb6{margin-bottom:6px}
+
+/* ── GRUPO COLAPSÁVEL ── */
+.group-hdr{cursor:pointer;transition:opacity .1s}
+.group-hdr:active{opacity:.8}
+.group-body{padding-left:10px;border-left:3px solid var(--brd);margin-left:6px;margin-bottom:10px}
+.group-body .card{border-left:none}
+.group-count{font-size:11px;color:var(--txl);font-weight:400;margin-left:4px}
+.group-chevron{font-size:13px;color:var(--txl);margin-left:6px;transition:transform .2s}
+.group-chevron.open{transform:rotate(180deg)}
 </style>
 </head>
 <body>
@@ -617,6 +627,101 @@ function renderNav(){
 function goTab(id){S.tab=id;render();}
 
 // ═══════════════════════════════════════════════════
+// GRUPOS COLAPSÁVEIS
+// ═══════════════════════════════════════════════════
+if(!window._openGroups)window._openGroups={};
+
+function fmtDate(iso){
+  const d=new Date(iso);
+  return`${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}`;
+}
+
+function renderTxGroups(mx,mi){
+  let html='';
+
+  // ── RECEITAS ──
+  if(mi.length){
+    const total=mi.reduce((s,t)=>s+t.amount,0);
+    const open=!!window._openGroups['__inc'];
+    const sorted=[...mi].sort((a,b)=>new Date(b.date)-new Date(a.date));
+    html+=`<div class="card group-hdr mb6" onclick="toggleGroup('__inc')">
+      <div style="display:flex;align-items:center;gap:10px;padding:12px 14px">
+        <div style="width:34px;height:34px;border-radius:9px;background:var(--grns);display:flex;align-items:center;justify-content:center;font-size:17px;flex-shrink:0">💰</div>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:13px;font-weight:600;color:var(--txt)">Receitas<span class="group-count">${mi.length} item${mi.length!==1?'s':''}</span></div>
+        </div>
+        <div style="font-size:15px;font-weight:700;color:var(--grn)">+${fmt(total)}</div>
+        <span class="group-chevron${open?' open':''}">▼</span>
+      </div>
+    </div>`;
+    if(open){
+      html+=`<div class="group-body" style="border-color:var(--grn)44">`;
+      sorted.forEach(t=>{
+        const c=ICATS.find(x=>x.id===t.category)||ICATS[5];
+        const who=t.user==='u1'?S.unames[0]:S.unames[1];
+        html+=`<div class="card item-row mb6">
+          <div class="item-ico" style="background:${c.color}22">${c.icon}</div>
+          <div style="flex:1;min-width:0">
+            <div class="item-name">${t.label||c.label}</div>
+            <div class="item-sub">${fmtDate(t.date)} · ${who}</div>
+          </div>
+          <div style="font-size:14px;font-weight:700;color:var(--grn);flex-shrink:0">+${fmt(t.amount)}</div>
+          <button class="edit-btn" onclick="openEditTx('${t.id}','inc');event.stopPropagation()">✏️</button>
+          <button class="x-btn" onclick="removeInc('${t.id}');event.stopPropagation()">×</button>
+        </div>`;
+      });
+      html+=`</div>`;
+    }
+  }
+
+  // ── DESPESAS POR CATEGORIA ──
+  const catIds=[...new Set(mx.map(t=>t.category))];
+  catIds.forEach(catId=>{
+    const c=CATS.find(x=>x.id===catId)||CATS[7];
+    const items=[...mx.filter(t=>t.category===catId)].sort((a,b)=>new Date(b.date)-new Date(a.date));
+    const catTotal=items.reduce((s,t)=>s+t.amount,0);
+    const gKey='__cat_'+catId;
+    const open=!!window._openGroups[gKey];
+    html+=`<div class="card group-hdr mb6" onclick="toggleGroup('${gKey}')">
+      <div style="display:flex;align-items:center;gap:10px;padding:12px 14px">
+        <div style="width:34px;height:34px;border-radius:9px;background:${c.color}22;display:flex;align-items:center;justify-content:center;font-size:17px;flex-shrink:0">${c.icon}</div>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:13px;font-weight:600;color:var(--txt)">${c.label}<span class="group-count">${items.length} item${items.length!==1?'s':''}</span></div>
+        </div>
+        <div style="font-size:15px;font-weight:700;color:var(--pri)">−${fmt(catTotal)}</div>
+        <span class="group-chevron${open?' open':''}">▼</span>
+      </div>
+    </div>`;
+    if(open){
+      html+=`<div class="group-body" style="border-color:${c.color}66">`;
+      items.forEach(t=>{
+        const who=t.user==='u1'?S.unames[0]:t.user==='u2'?S.unames[1]:'Ambos';
+        html+=`<div class="card item-row mb6">
+          <div class="item-ico" style="background:${c.color}22">${c.icon}</div>
+          <div style="flex:1;min-width:0">
+            <div class="item-name">${t.label||c.label}${t.isRec?'<span class="rec-badge">FIXO</span>':''}</div>
+            <div class="item-sub">${fmtDate(t.date)} · ${who}</div>
+          </div>
+          <div style="font-size:14px;font-weight:700;color:var(--pri);flex-shrink:0">−${fmt(t.amount)}</div>
+          <button class="edit-btn" onclick="openEditTx('${t.id}','exp');event.stopPropagation()">✏️</button>
+          <button class="x-btn" onclick="removeTx('${t.id}');event.stopPropagation()">×</button>
+        </div>`;
+      });
+      html+=`</div>`;
+    }
+  });
+
+  return html;
+}
+
+window.toggleGroup=function(id){
+  if(!window._openGroups)window._openGroups={};
+  window._openGroups[id]=!window._openGroups[id];
+  const el=document.getElementById('content');
+  if(el){el.innerHTML='';renderFinancas(el);}
+};
+
+// ═══════════════════════════════════════════════════
 // FINANÇAS TAB
 // ═══════════════════════════════════════════════════
 function renderFinancas(el){
@@ -697,46 +802,17 @@ function renderFinancas(el){
     <button class="btn btn-pri" style="flex:1;font-size:13px" onclick="openAddTx()">+ Despesa</button>
   </div>`;
 
-  // Transaction list (merged)
-  const allItems=[
-    ...mx.map(t=>({...t,_type:'exp'})),
-    ...mi.map(t=>({...t,_type:'inc'})),
-  ].sort((a,b)=>new Date(b.date)-new Date(a.date));
+  // Transaction list (grouped)
+  const totalItems=mx.length+mi.length;
+  html+=`<div class="row mb8">
+    <div style="font-size:12px;font-weight:600;color:var(--txm)">Lançamentos de ${MONTHS[S.viewMonth]}</div>
+    <span style="font-size:11px;color:var(--txl)">${totalItems} item${totalItems!==1?'s':''}</span>
+  </div>`;
 
-  html+=`<div style="font-size:12px;font-weight:600;color:var(--txm);margin-bottom:10px">Lançamentos de ${MONTHS[S.viewMonth]}</div>`;
-
-  if(!allItems.length){
+  if(!totalItems){
     html+=`<div class="card empty"><div class="empty-ico">💸</div><div class="empty-txt">Nenhum lançamento esse mês</div></div>`;
   }else{
-    allItems.slice(0,30).forEach(t=>{
-      if(t._type==='exp'){
-        const c=CATS.find(c=>c.id===t.category)||CATS[7];
-        const who=t.user==='u1'?S.unames[0]:t.user==='u2'?S.unames[1]:'Ambos';
-        html+=`<div class="card item-row">
-          <div class="item-ico" style="background:${c.color}22">${c.icon}</div>
-          <div style="flex:1;min-width:0">
-            <div class="item-name">${t.label||c.label}${t.isRec?'<span class="rec-badge">FIXO</span>':''}</div>
-            <div class="item-sub">${c.label} · ${who}</div>
-          </div>
-          <div style="font-size:14px;font-weight:700;color:var(--pri);flex-shrink:0">−${fmt(t.amount)}</div>
-          <button class="edit-btn" onclick="openEditTx('${t.id}','exp')">✏️</button>
-          <button class="x-btn" onclick="removeTx('${t.id}')">×</button>
-        </div>`;
-      }else{
-        const c=ICATS.find(c=>c.id===t.category)||ICATS[5];
-        const who=t.user==='u1'?S.unames[0]:t.user==='u2'?S.unames[1]:'Ambos';
-        html+=`<div class="card item-row">
-          <div class="item-ico" style="background:${c.color}22">${c.icon}</div>
-          <div style="flex:1;min-width:0">
-            <div class="item-name">${t.label||c.label}<span class="inc-badge">RECEITA</span></div>
-            <div class="item-sub">${c.label} · ${who}</div>
-          </div>
-          <div style="font-size:14px;font-weight:700;color:var(--grn);flex-shrink:0">+${fmt(t.amount)}</div>
-          <button class="edit-btn" onclick="openEditTx('${t.id}','inc')">✏️</button>
-          <button class="x-btn" onclick="removeInc('${t.id}')">×</button>
-        </div>`;
-      }
-    });
+    html+=renderTxGroups(mx,mi);
   }
 
   el.innerHTML=html;
@@ -791,6 +867,8 @@ function openAddTx(editId){
     <input class="f-inp" id="tx-amt" type="number" placeholder="0,00" value="${tx?tx.amount:''}"></div>
     <div class="f-group"><label class="f-label">Descrição</label>
     <input class="f-inp" id="tx-lbl" placeholder="Mercado, farmácia, conta…" value="${tx?tx.label:''}"></div>
+    <div class="f-group"><label class="f-label">Data do gasto</label>
+    <input class="f-inp" id="tx-date" type="date" value="${tx?tx.date.split('T')[0]:TODAY}"></div>
     <div class="f-group"><label class="f-label">Categoria</label>
     <div class="cat-grid" id="cat-grid">${CATS.map(c=>`
       <button class="cat-btn${c.id===window._selCat?' on':''}" id="cb-${c.id}"
@@ -833,11 +911,13 @@ window._selCat='alimentacao'; window._selUser='u1';
 function saveTx(){
   const v=parseFloat(document.getElementById('tx-amt').value);
   const lbl=document.getElementById('tx-lbl').value.trim();
+  const dateVal=document.getElementById('tx-date').value||TODAY;
+  const dateISO=new Date(dateVal+'T12:00:00').toISOString();
   if(!v||v<=0)return;
   if(window._editTxId){
-    S.tx=S.tx.map(t=>t.id===window._editTxId?{...t,amount:v,category:window._selCat,label:lbl,user:window._selUser}:t);
+    S.tx=S.tx.map(t=>t.id===window._editTxId?{...t,amount:v,category:window._selCat,label:lbl,user:window._selUser,date:dateISO}:t);
   }else{
-    S.tx.push({id:uid(),amount:v,category:window._selCat,label:lbl,user:window._selUser||'u1',date:new Date().toISOString()});
+    S.tx.push({id:uid(),amount:v,category:window._selCat,label:lbl,user:window._selUser||'u1',date:dateISO});
   }
   persist('tx',S.tx);closeSheet();render();toast(window._editTxId?'Despesa atualizada ✓':'Despesa salva ✓');
   window._editTxId=null;
@@ -856,6 +936,8 @@ function openAddInc(editId){
     <input class="f-inp" id="inc-amt" type="number" placeholder="0,00" value="${tx?tx.amount:''}"></div>
     <div class="f-group"><label class="f-label">Descrição</label>
     <input class="f-inp" id="inc-lbl" placeholder="Salário, freelance, venda…" value="${tx?tx.label:''}"></div>
+    <div class="f-group"><label class="f-label">Data do recebimento</label>
+    <input class="f-inp" id="inc-date" type="date" value="${tx?tx.date.split('T')[0]:TODAY}"></div>
     <div class="f-group"><label class="f-label">Categoria</label>
     <div class="cat-grid" id="icat-grid">${ICATS.map(c=>`
       <button class="cat-btn${c.id===window._selICat?' on':''}" id="icb-${c.id}"
@@ -894,11 +976,13 @@ window._selICat='salario'; window._selIUser='u1';
 function saveInc(){
   const v=parseFloat(document.getElementById('inc-amt').value);
   const lbl=document.getElementById('inc-lbl').value.trim();
+  const dateVal=document.getElementById('inc-date').value||TODAY;
+  const dateISO=new Date(dateVal+'T12:00:00').toISOString();
   if(!v||v<=0)return;
   if(window._editIncId){
-    S.inc=S.inc.map(t=>t.id===window._editIncId?{...t,amount:v,category:window._selICat,label:lbl,user:window._selIUser}:t);
+    S.inc=S.inc.map(t=>t.id===window._editIncId?{...t,amount:v,category:window._selICat,label:lbl,user:window._selIUser,date:dateISO}:t);
   }else{
-    S.inc.push({id:uid(),amount:v,category:window._selICat||'salario',label:lbl,user:window._selIUser||'u1',date:new Date().toISOString()});
+    S.inc.push({id:uid(),amount:v,category:window._selICat||'salario',label:lbl,user:window._selIUser||'u1',date:dateISO});
   }
   persist('inc',S.inc);closeSheet();render();toast(window._editIncId?'Receita atualizada ✓':'Receita salva ✓');
   window._editIncId=null;
