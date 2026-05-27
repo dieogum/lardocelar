@@ -222,6 +222,17 @@ input:checked+.tslider:before{transform:translateX(18px)}
 .divider{height:1px;background:var(--brd);margin:14px 0}
 .mb6{margin-bottom:6px}
 
+/* ── HISTÓRICO DE PREÇOS ── */
+.price-tag{font-size:10px;font-weight:700;border-radius:4px;padding:2px 6px;flex-shrink:0}
+.price-up{color:var(--pri);background:var(--pris)}
+.price-dn{color:var(--grn);background:var(--grns)}
+.price-new{color:var(--amb);background:var(--ambs)}
+.ph-row{display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--brds)}
+.ph-date{font-size:12px;color:var(--txl);flex-shrink:0;width:72px}
+.ph-price{font-size:15px;font-weight:700;color:var(--txt);flex:1;text-align:center}
+.ph-delta{font-size:11px;font-weight:700;flex-shrink:0;min-width:52px;text-align:right}
+.spark-wrap{flex-shrink:0}
+
 /* ── GRUPO COLAPSÁVEL ── */
 .group-hdr{cursor:pointer;transition:opacity .1s}
 .group-hdr:active{opacity:.8}
@@ -333,6 +344,7 @@ function loadAll(){
   S.claudeKey=lsGet('claudeKey',''); S.darkMode=lsGet('darkMode',false);
   applyDark();
   applyRecurring();
+  migratePh();
 }
 
 function persist(key,val){
@@ -1098,15 +1110,184 @@ function saveEv(){
 function removeEv(id){S.ev=S.ev.filter(e=>e.id!==id);persist('ev',S.ev);render();}
 
 // ═══════════════════════════════════════════════════
+// HISTÓRICO DE PREÇOS (base de dados local)
+// ═══════════════════════════════════════════════════
+
+// Migra formato antigo {name: number} → {name: [{price, date}]}
+function migratePh(){
+  let changed=false;
+  Object.entries(S.ph).forEach(([k,v])=>{
+    if(typeof v==='number'){S.ph[k]=[{price:v,date:TODAY}];changed=true;}
+  });
+  if(changed)lsSet('ph',S.ph);
+}
+
+// Retorna último registro de preço para um item (busca fuzzy)
+function getLastPh(name){
+  if(!name)return null;
+  const k=name.toLowerCase().trim();
+  let hist=S.ph[k];
+  if(!hist){
+    const key=Object.keys(S.ph).find(p=>p.includes(k)||k.includes(p));
+    if(key)hist=S.ph[key];
+  }
+  if(!hist||!hist.length)return null;
+  if(Array.isArray(hist))return hist[hist.length-1];
+  return{price:hist,date:TODAY};
+}
+
+// Registra novo preço (só salva se diferente do último)
+function recordPh(name,price){
+  if(!name||!price||price<=0)return false;
+  const k=name.toLowerCase().trim();
+  if(!Array.isArray(S.ph[k])){
+    S.ph[k]=S.ph[k]?[{price:S.ph[k],date:TODAY}]:[];
+  }
+  const arr=S.ph[k];
+  const last=arr.length?arr[arr.length-1]:null;
+  if(!last||last.price!==price){
+    arr.push({price,date:TODAY});
+    persist('ph',S.ph);
+    return true;
+  }
+  return false;
+}
+
+// Calcula variação entre os dois últimos preços
+function priceDelta(hist){
+  if(!hist||hist.length<2)return null;
+  const prev=hist[hist.length-2].price;
+  const curr=hist[hist.length-1].price;
+  if(!prev)return null;
+  const pct=((curr-prev)/prev*100);
+  return{pct:Math.abs(pct).toFixed(1),up:curr>prev,eq:curr===prev};
+}
+
+// Desenha sparkline SVG
+function sparklineSvg(hist){
+  if(!hist||hist.length<2)return'';
+  const prices=hist.map(h=>h.price);
+  const mn=Math.min(...prices),mx2=Math.max(...prices);
+  const range=mx2-mn||mn*0.1||1;
+  const W=72,H=30,P=3;
+  const coords=prices.map((p,i)=>({
+    x:P+(i/(prices.length-1))*(W-P*2),
+    y:H-P-((p-mn)/range)*(H-P*2)
+  }));
+  const pts=coords.map(c=>`${c.x.toFixed(1)},${c.y.toFixed(1)}`).join(' ');
+  const last=coords[coords.length-1];
+  const lastUp=prices[prices.length-1]>=prices[prices.length-2];
+  const col=lastUp?'#C14B2A':'#4A865A';
+  return`<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" class="spark-wrap">
+    <polyline points="${pts}" fill="none" stroke="${col}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+    <circle cx="${last.x.toFixed(1)}" cy="${last.y.toFixed(1)}" r="3" fill="${col}"/>
+  </svg>`;
+}
+
+// Abre modal de histórico de preços de um item
+function openPriceHistory(name){
+  const k=name.toLowerCase().trim();
+  let hist=Array.isArray(S.ph[k])?S.ph[k]:(S.ph[k]?[{price:S.ph[k],date:TODAY}]:null);
+  if(!hist||!hist.length){toast('Sem histórico para "'+name+'"');return;}
+  const sorted=[...hist].sort((a,b)=>a.date.localeCompare(b.date));
+  const first=sorted[0].price;
+  const last=sorted[sorted.length-1].price;
+  const totalPct=first?((last-first)/first*100).toFixed(1):0;
+  const trendCol=last>=first?'var(--pri)':'var(--grn)';
+  const spark=sparklineSvg(sorted);
+
+  // Linhas de histórico (mais recente primeiro)
+  const rows=[...sorted].reverse().map((h,i,arr)=>{
+    const prev=arr[i+1];
+    let delta='';
+    if(prev){
+      const diff=h.price-prev.price;
+      const pct=prev.price?(diff/prev.price*100).toFixed(1):0;
+      if(diff>0)delta=`<span class="ph-delta price-tag price-up">↑${Math.abs(pct)}%</span>`;
+      else if(diff<0)delta=`<span class="ph-delta price-tag price-dn">↓${Math.abs(pct)}%</span>`;
+      else delta=`<span class="ph-delta" style="color:var(--txl);font-size:11px">igual</span>`;
+    }else{
+      delta=`<span class="ph-delta price-tag price-new">1º reg.</span>`;
+    }
+    const dateF=h.date.replace('T',' ').split(' ')[0].split('-').reverse().join('/');
+    return`<div class="ph-row">
+      <span class="ph-date">${dateF}</span>
+      <span class="ph-price">${fmtS(h.price)}</span>
+      ${delta}
+    </div>`;
+  }).join('');
+
+  sheet(`<div class="sheet-drag"></div>
+    <div style="display:flex;align-items:flex-start;gap:12px;margin-bottom:16px">
+      <div style="flex:1">
+        <div style="font-size:20px;font-weight:800;color:var(--txt);margin-bottom:2px">${name}</div>
+        <div style="font-size:12px;color:var(--txl)">${sorted.length} registro${sorted.length!==1?'s':''} · toque para editar</div>
+      </div>
+      ${spark}
+    </div>
+    <div class="card c-pad mb14">
+      <div style="display:flex;align-items:center;justify-content:space-between">
+        <div>
+          <div style="font-size:11px;color:var(--txl);margin-bottom:2px">Último preço</div>
+          <div style="font-size:24px;font-weight:800;color:var(--txt)">${fmtS(last)}</div>
+        </div>
+        ${sorted.length>1?`<div style="text-align:right">
+          <div style="font-size:11px;color:var(--txl);margin-bottom:2px">Variação total</div>
+          <div style="font-size:18px;font-weight:700;color:${trendCol}">${last>=first?'+':''}${totalPct}%</div>
+          <div style="font-size:10px;color:var(--txl)">${sorted[0].date.split('-').reverse().slice(0,2).join('/')} → hoje</div>
+        </div>`:''}
+      </div>
+    </div>
+    <div style="font-size:12px;font-weight:600;color:var(--txm);margin-bottom:4px">Histórico de preços</div>
+    ${rows}
+    <div style="margin-top:16px;display:flex;gap:8px">
+      <button class="btn btn-pri" style="flex:1" onclick="openUpdatePrice(decodeURIComponent('${encodeURIComponent(name)}'))">Registrar novo preço</button>
+      <button class="btn btn-ghost" style="flex:1" onclick="closeSheet()">Fechar</button>
+    </div>
+  `);
+}
+window.openPriceHistory=openPriceHistory;
+
+// Modal para registrar novo preço manualmente
+function openUpdatePrice(name){
+  const last=getLastPh(name);
+  sheet(`<div class="sheet-drag"></div>
+    <div class="sheet-title">Novo preço · ${name}</div>
+    ${last?`<div style="font-size:12px;color:var(--txl);margin-bottom:12px">Último: <b>${fmtS(last.price)}</b> em ${last.date.split('-').reverse().slice(0,2).join('/')}</div>`:''}
+    <div class="f-group"><label class="f-label">Novo preço unitário (R$)</label>
+    <input class="f-inp" id="upd-price" type="number" step="0.01" placeholder="0,00" value="${last?last.price:''}">
+    </div>
+    <button class="btn btn-pri btn-full" style="margin-bottom:8px" onclick="saveUpdatedPrice(decodeURIComponent('${encodeURIComponent(name)}'))">Salvar</button>
+    <button class="btn btn-ghost btn-full" onclick="openPriceHistory(decodeURIComponent('${encodeURIComponent(name)}'))">← Voltar ao histórico</button>
+  `);
+}
+window.openUpdatePrice=openUpdatePrice;
+
+function saveUpdatedPrice(name){
+  const price=parseFloat(document.getElementById('upd-price').value);
+  if(!price||price<=0)return;
+  const changed=recordPh(name,price);
+  // Update price in any pending shopping items with same name
+  const k=name.toLowerCase().trim();
+  let siChanged=false;
+  S.si=S.si.map(i=>{
+    if(i.name.toLowerCase().trim()===k&&!i.checked){siChanged=true;return{...i,price};}
+    return i;
+  });
+  if(siChanged)persist('si',S.si);
+  closeSheet();
+  toast(changed?'Preço registrado ✓':'Preço igual ao último — nada alterado');
+  render();
+}
+window.saveUpdatedPrice=saveUpdatedPrice;
+
+// ═══════════════════════════════════════════════════
 // COMPRAS TAB
 // ═══════════════════════════════════════════════════
 function renderCompras(el){
   const pending=S.si.filter(i=>!i.checked);
   const done=S.si.filter(i=>i.checked);
-  const totalEst=pending.reduce((s,i)=>{
-    const est=i.estPrice||getEst(i.name)||0;
-    return s+(est*(i.qty||1));
-  },0);
+  const totalEst=pending.reduce((s,i)=>(s+(i.price||0)*(i.qty||1)),0);
   const mx=monthTx();
   const spent=mx.reduce((s,t)=>s+t.amount,0);
   const rem=S.orc-spent;
@@ -1116,38 +1297,55 @@ function renderCompras(el){
     <div id="shop-summary">
       <div class="sum-col"><div class="sum-lbl">Estimativa da lista</div><div class="sum-val" style="color:var(--amb)">${fmt(totalEst)}</div></div>
       <div style="width:1px;background:var(--brd)"></div>
-      <div class="sum-col"><div class="sum-lbl">Disponível</div><div class="sum-val" style="color:${over?'var(--pri)':'var(--grn)'}">${fmt(rem)}</div></div>
+      <div class="sum-col"><div class="sum-lbl">Disponível no mês</div><div class="sum-val" style="color:${over?'var(--pri)':'var(--grn)'}">${fmt(rem)}</div></div>
     </div>
     ${over?`<div class="warn-box">⚠️ Estimativa supera o disponível em ${fmt(totalEst-rem)}</div>`:''}
   </div>
-  <div class="btn-row">
-    <button class="btn btn-pri" style="flex:1" onclick="openAddItem()">+ Adicionar item</button>
-    <button style="background:var(--grns);color:var(--grn);border:1px solid #4A865A40;border-radius:12px;padding:0 14px;cursor:pointer;font-size:20px" onclick="openScan()" title="Escanear nota">📷</button>
-  </div>`;
+  <button class="btn btn-pri btn-full mb12" onclick="openAddItem()">+ Adicionar item</button>`;
 
   if(!S.si.length){
-    html+=`<div class="card empty"><div class="empty-ico">🛒</div><div class="empty-txt">Lista vazia</div><div class="empty-sub">Adicione itens acima</div></div>`;
+    html+=`<div class="card empty"><div class="empty-ico">🛒</div><div class="empty-txt">Lista vazia</div><div class="empty-sub">Adicione itens com seus preços</div></div>`;
   }else{
     pending.forEach(item=>{
-      const est=item.estPrice||getEst(item.name);
-      html+=`<div class="card item-row">
-        <button class="check-box" onclick="toggleItem('${item.id}')"></button>
-        <div style="flex:1">
+      const k=item.name.toLowerCase().trim();
+      const hist=Array.isArray(S.ph[k])?S.ph[k]:null;
+      const delta=priceDelta(hist);
+      const price=item.price||0;
+      const total=price*(item.qty||1);
+      const enc=encodeURIComponent(item.name);
+      let dHtml='';
+      if(delta&&!delta.eq)dHtml=`<span class="price-tag ${delta.up?'price-up':'price-dn'}">${delta.up?'↑':'↓'}${delta.pct}%</span>`;
+      else if(hist&&hist.length===1)dHtml=`<span class="price-tag price-new">novo</span>`;
+      html+=`<div class="card item-row mb6" style="cursor:pointer" onclick="openPriceHistory(decodeURIComponent('${enc}'))">
+        <button class="check-box" onclick="toggleItem('${item.id}');event.stopPropagation()"></button>
+        <div style="flex:1;min-width:0">
           <div class="item-name">${item.name}</div>
-          <div class="item-sub">Qtd: ${item.qty}${est?' · Est. '+fmtS(est*item.qty):' · sem histórico'}</div>
+          <div class="item-sub">×${item.qty}${price?' · '+fmtS(price)+'/un':' · sem preço — toque para registrar'}</div>
         </div>
-        <button class="x-btn" onclick="removeItem('${item.id}')">×</button>
+        ${dHtml}
+        <div style="font-size:14px;font-weight:700;color:${total?'var(--txt)':'var(--txl)'};flex-shrink:0;margin:0 4px">${total?fmt(total):'—'}</div>
+        <button class="x-btn" onclick="removeItem('${item.id}');event.stopPropagation()">×</button>
       </div>`;
     });
     if(done.length){
-      html+=`<div class="shop-done-hdr">✓ Já comprado</div>`;
+      html+=`<div class="shop-done-hdr">✓ Já comprado (${done.length})</div>`;
       done.forEach(item=>{
-        html+=`<div class="card item-row" style="opacity:.55">
-          <button class="check-box done" onclick="toggleItem('${item.id}')">✓</button>
+        const price=item.price||0;
+        const total=price*(item.qty||1);
+        const enc=encodeURIComponent(item.name);
+        html+=`<div class="card item-row mb6" style="opacity:.55;cursor:pointer" onclick="openPriceHistory(decodeURIComponent('${enc}'))">
+          <button class="check-box done" onclick="toggleItem('${item.id}');event.stopPropagation()">✓</button>
           <div style="flex:1;font-size:13px;color:var(--txm);text-decoration:line-through">${item.name} ×${item.qty}</div>
-          <button class="x-btn" onclick="removeItem('${item.id}')">×</button>
+          ${total?`<div style="font-size:13px;color:var(--txl);flex-shrink:0">${fmt(total)}</div>`:''}
+          <button class="x-btn" onclick="removeItem('${item.id}');event.stopPropagation()">×</button>
         </div>`;
       });
+    }
+    const phCount=Object.keys(S.ph).length;
+    if(phCount>0){
+      html+=`<div style="margin-top:14px;text-align:center;font-size:11px;color:var(--txl)">
+        📊 Base de preços: ${phCount} produto${phCount!==1?'s':''} cadastrado${phCount!==1?'s':''}
+      </div>`;
     }
   }
   el.innerHTML=html;
@@ -1155,120 +1353,51 @@ function renderCompras(el){
 
 function openAddItem(){
   sheet(`<div class="sheet-drag"></div><div class="sheet-title">Adicionar item</div>
-    <div class="f-group"><label class="f-label">Nome</label>
-    <input class="f-inp" id="si-name" placeholder="Arroz, leite, detergente…" oninput="showEstHint()"></div>
-    <div id="est-hint" style="margin-bottom:10px"></div>
-    <div class="f-group"><label class="f-label">Quantidade</label>
-    <input class="f-inp" id="si-qty" type="number" value="1"></div>
+    <div class="f-group"><label class="f-label">Nome do item</label>
+    <input class="f-inp" id="si-name" placeholder="Arroz, leite, detergente…" oninput="showPriceHint()" autocomplete="off"></div>
+    <div id="price-hint" style="margin-bottom:8px"></div>
+    <div style="display:flex;gap:10px">
+      <div class="f-group" style="flex:2">
+        <label class="f-label">Preço unitário (R$)</label>
+        <input class="f-inp" id="si-price" type="number" step="0.01" placeholder="0,00">
+      </div>
+      <div class="f-group" style="flex:1">
+        <label class="f-label">Qtd</label>
+        <input class="f-inp" id="si-qty" type="number" value="1" min="1">
+      </div>
+    </div>
     <button class="btn btn-pri btn-full" onclick="saveItem()">Adicionar à lista</button>
   `);
 }
-window.showEstHint=function(){
+window.showPriceHint=function(){
   const name=document.getElementById('si-name')?.value||'';
-  const est=getEst(name);
-  const el=document.getElementById('est-hint');
+  const last=getLastPh(name);
+  const el=document.getElementById('price-hint');
   if(!el)return;
-  el.innerHTML=est?`<div style="background:var(--grns);color:var(--grn);border-radius:8px;padding:7px 12px;font-size:12px">💡 Preço estimado: ${fmtS(est)} (do histórico)</div>`:'';
+  if(last){
+    const dateF=last.date.split('-').reverse().slice(0,2).join('/');
+    el.innerHTML=`<div style="background:var(--grns);border-radius:8px;padding:8px 12px;font-size:12px;display:flex;align-items:center;justify-content:space-between;gap:8px">
+      <span style="color:var(--grn)">💡 Último: <b>${fmtS(last.price)}</b> (${dateF})</span>
+      <button onclick="document.getElementById('si-price').value='${last.price}';document.getElementById('price-hint').style.display='none'"
+        style="background:var(--grn);color:#FFF;border:none;border-radius:6px;padding:3px 10px;font-size:11px;cursor:pointer;font-weight:600;white-space:nowrap;font-family:inherit">Usar ✓</button>
+    </div>`;
+    const priceEl=document.getElementById('si-price');
+    if(priceEl&&!priceEl.value)priceEl.value=last.price;
+  }else{
+    el.innerHTML='';
+  }
 };
 function saveItem(){
   const name=document.getElementById('si-name').value.trim();
   const qty=parseInt(document.getElementById('si-qty').value)||1;
+  const price=parseFloat(document.getElementById('si-price').value)||0;
   if(!name)return;
-  S.si.push({id:uid(),name,qty,estPrice:getEst(name),checked:false});
+  if(price>0)recordPh(name,price);
+  S.si.push({id:uid(),name,qty,price,checked:false});
   persist('si',S.si);closeSheet();render();toast('Item adicionado ✓');
 }
 function toggleItem(id){S.si=S.si.map(i=>i.id===id?{...i,checked:!i.checked}:i);persist('si',S.si);render();}
 function removeItem(id){S.si=S.si.filter(i=>i.id!==id);persist('si',S.si);render();}
-
-// ─── SCANNER ───
-function openScan(){
-  sheet(`<div class="sheet-drag"></div><div class="sheet-title">Escanear nota fiscal</div>
-    <div id="scan-body">
-      ${!S.claudeKey?`<div style="background:var(--ambs);color:var(--amb);border-radius:8px;padding:8px 12px;font-size:12px;margin-bottom:12px">⚠️ Configure a chave da API em Configurações para usar este recurso.</div>`:''}
-      <div style="display:flex;gap:10px;margin-bottom:14px">
-        <button class="btn btn-pri" style="flex:1;font-size:13px" onclick="document.getElementById('scan-cam').click()">📷 Tirar foto</button>
-        <button class="btn btn-sec" style="flex:1;font-size:13px" onclick="document.getElementById('scan-gal').click()">🖼 Galeria</button>
-      </div>
-      <input type="file" id="scan-cam" accept="image/*" capture="environment" style="display:none" onchange="onScanFile(event)">
-      <input type="file" id="scan-gal" accept="image/*" style="display:none" onchange="onScanFile(event)">
-      <div style="font-size:12px;color:var(--txl);text-align:center;margin-bottom:14px">Foto nítida e bem iluminada.</div>
-      <button class="btn btn-ghost btn-full" onclick="closeSheet()">Cancelar</button>
-    </div>
-  `);
-}
-
-async function compressImage(file){
-  return new Promise(res=>{
-    const img=new Image();
-    const url=URL.createObjectURL(file);
-    img.onload=()=>{
-      const MAX=1200;let w=img.width,h=img.height;
-      if(w>MAX||h>MAX){if(w>h){h=Math.round(h*MAX/w);w=MAX;}else{w=Math.round(w*MAX/h);h=MAX;}}
-      const cv=document.createElement('canvas');cv.width=w;cv.height=h;
-      cv.getContext('2d').drawImage(img,0,0,w,h);
-      URL.revokeObjectURL(url);
-      res(cv.toDataURL('image/jpeg',0.82).split(',')[1]);
-    };
-    img.onerror=()=>{URL.revokeObjectURL(url);res(null);};
-    img.src=url;
-  });
-}
-
-function extractJSON(txt){
-  try{return JSON.parse(txt.trim());}catch{}
-  const m=txt.match(/```(?:json)?\s*([\s\S]*?)```/);
-  if(m)try{return JSON.parse(m[1].trim());}catch{}
-  const o=txt.match(/\{[\s\S]*\}/);
-  if(o)try{return JSON.parse(o[0]);}catch{}
-  throw new Error('JSON não encontrado na resposta');
-}
-
-window.onScanFile=async function(e){
-  const file=e.target.files[0];
-  if(!file)return;
-  if(!S.claudeKey){document.getElementById('scan-err').textContent='Configure a chave da API em Configurações.';return;}
-  document.getElementById('scan-body').innerHTML=`<div style="text-align:center;padding:28px"><div style="font-size:36px;margin-bottom:12px">🔍</div><div style="font-size:14px;color:var(--txm);font-weight:500">Analisando a nota…</div></div>`;
-  try{
-    const b64=await compressImage(file);
-    if(!b64)throw new Error('Não foi possível processar a imagem');
-    if(!S.syncUrl||!S.syncPass)throw new Error('Configure o link do Apps Script nas Configurações.');
-    const fd=new URLSearchParams();
-    fd.append('p',S.syncPass);fd.append('a','scan');fd.append('img',b64);
-    fd.append('mime','image/jpeg');fd.append('k',S.claudeKey);
-    const resp=await fetch(S.syncUrl,{method:'POST',body:fd,redirect:'follow'});
-    const rawText=await resp.text();
-    let data;try{data=JSON.parse(rawText);}catch{throw new Error('Resposta inválida: '+rawText.slice(0,200));}
-    if(!data.ok)throw new Error(data.error||'Erro no servidor');
-    const result=extractJSON(data.result||'');
-    showScanResult(result);
-  }catch(err){
-    document.getElementById('scan-body').innerHTML=
-      `<div style="background:#FEE8E3;border-radius:10px;padding:14px;margin-bottom:14px;font-size:13px;color:var(--pri)">
-        <div style="font-weight:600;margin-bottom:4px">Não foi possível ler a nota</div>
-        <div style="font-size:11px;color:var(--txm)">${err.message}</div>
-      </div>
-      <button class="btn btn-pri btn-full" onclick="openScan()" style="margin-bottom:8px">Tentar novamente</button>
-      <button class="btn btn-ghost btn-full" onclick="closeSheet()">Cancelar</button>`;
-  }
-};
-function showScanResult(r){
-  const rows=(r.items||[]).map(i=>`<div style="display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--brds);font-size:13px"><span>${i.name} <span style="color:var(--txl)">×${i.quantity||1}</span></span><span style="font-weight:500">${fmtS(i.price)}</span></div>`).join('');
-  document.getElementById('scan-body').innerHTML=`
-    <div style="background:var(--grns);border-radius:10px;padding:12px;margin-bottom:12px">
-      <div style="font-size:13px;font-weight:600;color:var(--grn)">✓ Nota lida!</div>
-      <div style="font-size:12px;color:var(--txm);margin-top:3px">${r.store} · Total: ${fmt(r.total||0)}</div>
-    </div>
-    <div style="margin-bottom:14px">${rows}</div>
-    <button class="btn btn-grn btn-full" onclick="applyScan(${JSON.stringify(r).split('"').join("'")})">Salvar preços no histórico</button>`;
-}
-window.applyScan=function(r){
-  const newPH={...S.ph};
-  (r.items||[]).forEach(item=>{
-    const k=item.name.toLowerCase().trim();
-    newPH[k]=S.ph[k]?(S.ph[k]*0.6+item.price*0.4):item.price;
-  });
-  S.ph=newPH;persist('ph',S.ph);closeSheet();toast('Preços salvos ✓');render();
-};
 
 // ═══════════════════════════════════════════════════
 // NOTAS TAB
@@ -1390,11 +1519,6 @@ function openSettings(){
     <div class="f-group"><label class="f-label">Senha de sincronização</label>
     <input class="f-inp" id="set-spass" type="password" value="${S.syncPass}"></div>
 
-    <div class="set-section">Escaneamento de nota fiscal</div>
-    <div class="f-group"><label class="f-label">Chave da API (Hugging Face)</label>
-    <input class="f-inp" id="set-ckey" type="password" value="${S.claudeKey}" placeholder="hf_…"></div>
-    <div style="font-size:11px;color:var(--txl);margin-bottom:16px">Gratuito em huggingface.co · Salvo só neste dispositivo</div>
-
     <button class="btn btn-pri btn-full" onclick="saveSettings()" style="margin-bottom:10px">Salvar configurações</button>
     ${S.syncUrl&&S.syncPass?`<button class="btn btn-sec btn-full" onclick="pullSync();closeSheet()">⏬ Sincronizar agora</button>`:''}
   `);
@@ -1406,13 +1530,12 @@ function saveSettings(){
   const pin=String(document.getElementById('set-pin').value).slice(0,4)||'1234';
   const url=document.getElementById('set-url').value.trim();
   const sp=document.getElementById('set-spass').value;
-  const ck=document.getElementById('set-ckey').value.trim();
-  S.unames=[u1,u2];S.pin=pin;S.syncUrl=url;S.syncPass=sp;S.claudeKey=ck;
-  lsSet('un',[u1,u2]);lsSet('pin',pin);lsSet('syncUrl',url);lsSet('syncPass',sp);lsSet('claudeKey',ck);
+  S.unames=[u1,u2];S.pin=pin;S.syncUrl=url;S.syncPass=sp;
+  lsSet('un',[u1,u2]);lsSet('pin',pin);lsSet('syncUrl',url);lsSet('syncPass',sp);
   closeSheet();render();toast('Configurações salvas ✓');
 }
 
-// ─── RECURRING MANAGEMENT ───
+// --- RECURRING MANAGEMENT ---
 function openAddRec(){
   window._selRecCat='moradia'; window._selRecUser='u1';
   sheet(`<div class="sheet-drag"></div><div class="sheet-title">Novo gasto fixo</div>
@@ -1457,7 +1580,6 @@ function saveRec(){
   const newRec={id:uid(),label:lbl,amount:amt,category:window._selRecCat||'moradia',user:window._selRecUser||'u1',day};
   S.rec.push(newRec);
   persist('rec',S.rec);
-  // Apply immediately for this month
   const key=`${NOW.getFullYear()}-${NOW.getMonth()}`;
   const applied=lsGet('recApplied',{});
   const done=applied[key]||[];
@@ -1475,9 +1597,7 @@ function removeRec(id){
   closeSheet();openSettings();toast('Gasto fixo removido');
 }
 
-// ═══════════════════════════════════════════════════
 // SHEET MODAL
-// ═══════════════════════════════════════════════════
 function sheet(html){
   const s=document.getElementById('sheet');
   const o=document.getElementById('overlay');
@@ -1490,9 +1610,7 @@ function closeSheet(){
   document.getElementById('overlay').style.display='none';
 }
 
-// ═══════════════════════════════════════════════════
 // INIT
-// ═══════════════════════════════════════════════════
 loadAll();
 buildKeypad();
 document.getElementById('h-month').textContent='';
@@ -1505,7 +1623,6 @@ window.openEditOrc=openEditOrc;window.saveOrc=saveOrc;window.saveTx=saveTx;windo
 window.openAddEv=openAddEv;window.saveEv=saveEv;window.removeEv=removeEv;
 window.openAddItem=openAddItem;window.saveItem=saveItem;
 window.toggleItem=toggleItem;window.removeItem=removeItem;
-window.openScan=openScan;
 window.openAddNote=openAddNote;window.saveNote=saveNote;window.removeNote=removeNote;
 window.openSettings=openSettings;window.saveSettings=saveSettings;
 window.closeSheet=closeSheet;window.pullSync=pullSync;
