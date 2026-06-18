@@ -1505,6 +1505,11 @@ function openSettings(){
       }
     </div>
 
+    <div class="set-section">Importar extrato bancário</div>
+    <button class="btn btn-grn btn-full btn-sm" onclick="document.getElementById('ext-inp').click()">📄 Enviar extrato (OFX, CSV ou PDF)</button>
+    <input type="file" id="ext-inp" accept=".ofx,.csv,.txt,.pdf,text/csv,application/pdf" style="display:none" onchange="handleStatementFile(this.files[0]);this.value='';">
+    <div style="font-size:11px;color:var(--txl);margin:6px 0 14px">Lê o arquivo no próprio celular, sem internet nem custo. Categoriza sozinho e aprende com os seus ajustes.</div>
+
     <div class="set-section">Backup de dados</div>
     <div style="display:flex;gap:8px;margin-bottom:4px">
       <button class="btn btn-grn btn-sm" style="flex:1" onclick="exportBackup()">⬇ Exportar backup</button>
@@ -1597,6 +1602,291 @@ function removeRec(id){
   closeSheet();openSettings();toast('Gasto fixo removido');
 }
 
+// ═══════════════════════════════════════════════════
+// IMPORTAR EXTRATO BANCÁRIO  (100% local, sem IA/tokens)
+// ═══════════════════════════════════════════════════
+
+// --- Regras de categorização por palavra-chave (despesas) ---
+const DEFAULT_CAT_RULES=[
+  {cat:'alimentacao',kw:['ifood','rappi','uber eats','restaurante','padaria','mercado','supermerc','pao de acucar','carrefour','assai','atacad','hortifruti','lanche','pizza','burger','mcdonald','bk ','subway','acougue','feira','bar ','boteco','cafe','doceria','sorveteria','espetinho','churrasc','quitanda','sacolao','zaffari','big ','dia ','extra ','st marche']},
+  {cat:'transporte',kw:['uber','99app','99 ','99pop','cabify','indriver','posto ','combustivel','gasolina','etanol','ipva','estacion','pedagio','sem parar','veloe','conectcar','onibus','metro','passagem','mecanic','oficina','auto pecas','pneu','car wash','lava rapido','shell','ipiranga','br mania','petrobras']},
+  {cat:'moradia',kw:['aluguel','condominio','iptu','cemig','enel','copel','cpfl','light','energia','eletric','agua','sabesp','sanepar','caesb','cagece','gas ','comgas','net ','vivo','claro','tim ','oi ','internet','fibra','telefon','sky','seguro residencial','reforma','material de construcao','marido de aluguel']},
+  {cat:'saude',kw:['farmacia','drogaria','drogasil','pacheco','raia','pague menos','ultrafarma','panvel','hospital','clinica','laboratorio','medico','dentista','odonto','exame','plano de saude','unimed','amil','hapvida','sulamerica saude','bradesco saude','consulta','psicolog','fisioterap','academia','smartfit','gympass']},
+  {cat:'educacao',kw:['escola','faculdade','universidade','curso','udemy','alura','hotmart','colegio','mensalidade','livro','livraria','material escolar','kumon','wizard','ccaa','fisk','ingles','creche','apostila']},
+  {cat:'lazer',kw:['netflix','spotify','disney','hbo','globoplay','deezer','prime video','youtube premium','cinema','cinemark','ingresso','show','steam','playstation','xbox','nintendo','game','viagem','hotel','airbnb','booking','decolar','latam','gol ','azul ','123milhas','parque','clube']},
+  {cat:'vestuario',kw:['renner','riachuelo','c&a','cea ','zara','marisa','nike','adidas','centauro','netshoes','calcado','sapato','roupa','vestuario','pernambucanas','hering','reserva','farm ','dafiti','shein','calzado']},
+];
+// --- Regras de categorização (receitas) ---
+const DEFAULT_INC_RULES=[
+  {cat:'salario',kw:['salario','pagamento salario','folha','provento','remuneracao','ordenado','vencimento','holerite','13']},
+  {cat:'freelance',kw:['freela','freelance','servico prestado','autonomo','nota fiscal','nf-e','prestacao de servico','honorario']},
+  {cat:'aluguel_r',kw:['aluguel recebido','locacao','imobiliaria']},
+  {cat:'invest',kw:['rendiment','juros','dividendo','jcp','investiment','resgate','cdb','tesouro','lci','lca','poupanca','aplicacao']},
+  {cat:'presente',kw:['pix recebido','transferencia recebida','ted recebida','doc recebido','deposito','presente','reembolso']},
+];
+function _learned(key){return lsGet(key,[]);}
+function expRules(){return _learned('catRulesL').concat(DEFAULT_CAT_RULES);}
+function incRules(){return _learned('incRulesL').concat(DEFAULT_INC_RULES);}
+function categorize(desc,type){
+  const d=(desc||'').toLowerCase();
+  const rules=type==='income'?incRules():expRules();
+  for(const r of rules){if(r.kw.some(k=>d.includes(k)))return r.cat;}
+  return type==='income'?'outros_r':'outros';
+}
+function learnRule(desc,cat,type){
+  const d=(desc||'').toLowerCase();
+  const def=(type==='income'?DEFAULT_INC_RULES:DEFAULT_CAT_RULES);
+  // se já cai numa regra padrão correta, não precisa aprender
+  for(const r of def){if(r.kw.some(k=>d.includes(k))&&r.cat===cat)return;}
+  const words=d.split(/[^a-zà-ú0-9&]+/).filter(w=>w.length>=4&&!/^\d+$/.test(w));
+  if(!words.length)return;
+  const token=words.sort((a,b)=>b.length-a.length)[0];
+  const key=type==='income'?'incRulesL':'catRulesL';
+  const L=_learned(key);
+  const ex=L.find(r=>r.kw.includes(token));
+  if(ex){ex.cat=cat;}else{L.unshift({kw:[token],cat});}
+  lsSet(key,L.slice(0,300));
+}
+
+// --- Helpers de parsing ---
+function impParseMoney(s){
+  if(typeof s!=='string')s=String(s);
+  s=s.replace(/\s/g,'').replace(/r\$/i,'').replace(/[^\d,.\-]/g,'');
+  if(!s||s==='-')return NaN;
+  if(s.includes(',')&&s.includes('.')){
+    if(s.lastIndexOf(',')>s.lastIndexOf('.'))s=s.replace(/\./g,'').replace(',','.');
+    else s=s.replace(/,/g,'');
+  }else if(s.includes(',')){s=s.replace(',','.');}
+  return parseFloat(s);
+}
+function impParseDate(s){
+  s=(s||'').trim();
+  let m=s.match(/^(\d{4})(\d{2})(\d{2})/);if(m&&+m[2]>=1&&+m[2]<=12&&+m[3]>=1&&+m[3]<=31)return`${m[1]}-${m[2]}-${m[3]}`;
+  m=s.match(/(\d{4})-(\d{2})-(\d{2})/);if(m)return`${m[1]}-${m[2]}-${m[3]}`;
+  m=s.match(/(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4})/);if(m)return`${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`;
+  m=s.match(/(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2})\b/);if(m)return`20${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`;
+  return null;
+}
+function impCleanDesc(s){return (s||'').replace(/\s+/g,' ').trim().slice(0,70);}
+
+// --- Parser OFX ---
+function parseOFX(text){
+  const rows=[];
+  let blocks=text.match(/<STMTTRN>[\s\S]*?<\/STMTTRN>/gi);
+  if(!blocks||!blocks.length)blocks=text.split(/<STMTTRN>/i).slice(1);
+  (blocks||[]).forEach(b=>{
+    const get=t=>{const m=b.match(new RegExp('<'+t+'>([^<\\r\\n]*)','i'));return m?m[1].trim():'';};
+    const amt=impParseMoney(get('TRNAMT'));
+    if(isNaN(amt))return;
+    const memo=get('MEMO')||get('NAME')||get('CHECKNUM')||'Lançamento';
+    rows.push({date:impParseDate(get('DTPOSTED'))||TODAY,amount:amt,desc:memo});
+  });
+  return rows;
+}
+
+// --- Parser CSV ---
+function impDetectDelim(line){
+  const c={';':(line.split(';').length),',':(line.split(',').length),'\t':(line.split('\t').length)};
+  return Object.keys(c).sort((a,b)=>c[b]-c[a])[0];
+}
+function impSplitLine(line,d){
+  const out=[];let cur='',q=false;
+  for(let i=0;i<line.length;i++){const ch=line[i];
+    if(ch==='"'){if(q&&line[i+1]==='"'){cur+='"';i++;}else q=!q;}
+    else if(ch===d&&!q){out.push(cur);cur='';}
+    else cur+=ch;}
+  out.push(cur);return out.map(c=>c.trim());
+}
+function parseCSV(text){
+  text=text.replace(/^﻿/,'');
+  const lines=text.split(/\r?\n/).filter(l=>l.trim());
+  if(!lines.length)return[];
+  const d=impDetectDelim(lines[0]);
+  const grid=lines.map(l=>impSplitLine(l,d));
+  let hIdx=-1,di=-1,vi=-1,ci=-1;
+  for(let i=0;i<Math.min(grid.length,15);i++){
+    const low=grid[i].map(c=>c.toLowerCase());
+    const _d=low.findIndex(c=>/\b(data|date|dt)\b|data/.test(c));
+    const _v=low.findIndex(c=>/valor|value|amount|montante|quantia|crédito|debito|débito/.test(c));
+    const _c=low.findIndex(c=>/desc|hist|lanç|lanc|memo|detalhe|estabelec|transa|tipo|título/.test(c));
+    if(_d>=0&&_v>=0){hIdx=i;di=_d;vi=_v;ci=_c;break;}
+  }
+  const rows=[];
+  if(hIdx>=0){
+    for(let i=hIdx+1;i<grid.length;i++){
+      const g=grid[i];if(g.length<2)continue;
+      const date=impParseDate(g[di]);const amt=impParseMoney(g[vi]);
+      if(!date||isNaN(amt)||amt===0)continue;
+      const desc=ci>=0?g[ci]:g.filter((c,idx)=>idx!==di&&idx!==vi).sort((a,b)=>b.length-a.length)[0]||'';
+      rows.push({date,amount:amt,desc});
+    }
+  }else{
+    // sem cabeçalho: heurística por linha
+    grid.forEach(g=>{
+      let date=null,amt=NaN,descCells=[];
+      g.forEach(cell=>{
+        const dd=impParseDate(cell);
+        const mm=/^-?\s?r?\$?\s?-?\d{1,3}(\.\d{3})*,\d{2}$|^-?\d+\.\d{2}$/i.test(cell.trim())?impParseMoney(cell):NaN;
+        if(dd&&!date)date=dd;
+        else if(!isNaN(mm)&&isNaN(amt))amt=mm;
+        else if(cell.replace(/[\d\/\-.,r$\s]/gi,'').length>2)descCells.push(cell);
+      });
+      if(date&&!isNaN(amt)&&amt!==0)rows.push({date,amount:amt,desc:descCells.sort((a,b)=>b.length-a.length)[0]||''});
+    });
+  }
+  return rows;
+}
+
+// --- Parser de texto/linhas (PDF e colado) ---
+function parseTextLines(text){
+  const rows=[];
+  text.split(/\r?\n/).forEach(line=>{
+    const dm=line.match(/\d{1,2}[\/\-.]\d{1,2}[\/\-.]\d{2,4}|\d{4}-\d{2}-\d{2}/);
+    if(!dm)return;
+    const monies=line.match(/-?\s?r?\$?\s?-?\d{1,3}(?:\.\d{3})*,\d{2}|-?\d+\.\d{2}\b/gi);
+    if(!monies||!monies.length)return;
+    let amt=impParseMoney(monies[monies.length-1]);
+    if(isNaN(amt)||amt===0)return;
+    // descrição (sem data e sem valores)
+    let descTmp=line.replace(dm[0],' ');monies.forEach(mo=>{descTmp=descTmp.replace(mo,' ');});
+    const dlow=descTmp.toLowerCase();
+    const low=line.toLowerCase();
+    // sinal: padrão = despesa; vira receita só com marcador de crédito ou palavra de entrada
+    const lastMoney=monies[monies.length-1];
+    const hasMinus=/-/.test(lastMoney)||/-\s*$/.test(low.slice(0,line.indexOf(lastMoney)));
+    const credMark=/\bc\b|crédito|credito|\(c\)|\+/.test(low.slice(line.indexOf(lastMoney)))||/\bc\b|crédito|credito/.test(low.split(lastMoney)[0].slice(-4));
+    const debMark=/\bd\b|débito|debito|\(d\)/.test(low.slice(line.indexOf(lastMoney)));
+    const incomeWord=incRules().some(r=>r.kw.some(k=>dlow.includes(k)));
+    let sign=-1;
+    if(hasMinus||debMark)sign=-1;
+    else if(credMark||incomeWord)sign=1;
+    amt=sign*Math.abs(amt);
+    let desc=line.replace(dm[0],' ');
+    monies.forEach(mo=>{desc=desc.replace(mo,' ');});
+    desc=desc.replace(/\b[dc]\b/gi,' ');
+    rows.push({date:impParseDate(dm[0])||TODAY,amount:amt,desc:impCleanDesc(desc)});
+  });
+  return rows;
+}
+
+// --- PDF.js (carregado sob demanda, só quando precisa) ---
+function loadPdfJs(){
+  return new Promise((res,rej)=>{
+    if(window.pdfjsLib)return res();
+    const s=document.createElement('script');
+    s.src='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+    s.onload=()=>{try{pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';}catch(e){}res();};
+    s.onerror=()=>rej(new Error('CDN'));document.head.appendChild(s);
+  });
+}
+async function extractPdfText(buf){
+  await loadPdfJs();
+  const pdf=await pdfjsLib.getDocument({data:buf}).promise;
+  let out='';
+  for(let p=1;p<=pdf.numPages;p++){
+    const page=await pdf.getPage(p);const tc=await page.getTextContent();
+    const lines={};
+    tc.items.forEach(it=>{const y=Math.round(it.transform[5]);(lines[y]=lines[y]||[]).push(it.str);});
+    Object.keys(lines).map(Number).sort((a,b)=>b-a).forEach(y=>{out+=lines[y].join(' ')+'\n';});
+  }
+  return out;
+}
+
+// --- Entrada: arquivo escolhido ---
+function handleStatementFile(file){
+  if(!file)return;
+  const name=(file.name||'').toLowerCase();
+  toast('Lendo extrato…');
+  const reader=new FileReader();
+  if(name.endsWith('.pdf')){
+    reader.onload=async e=>{try{const txt=await extractPdfText(e.target.result);finishImportParse(parseTextLines(txt));}catch(err){console.error(err);toast('Não consegui ler o PDF. Tente OFX ou CSV.');}};
+    reader.readAsArrayBuffer(file);
+  }else{
+    reader.onload=e=>{
+      const txt=e.target.result;let rows;
+      if(name.endsWith('.ofx')||/<ofx>|<stmttrn>/i.test(txt))rows=parseOFX(txt);
+      else if(name.endsWith('.csv')||/[;,]\s*\S/.test(txt.split(/\r?\n/)[0]||''))rows=parseCSV(txt);
+      else rows=parseTextLines(txt);
+      if(!rows||!rows.length)rows=parseTextLines(txt);
+      finishImportParse(rows);
+    };
+    reader.readAsText(file,'utf-8');
+  }
+}
+function impIsDup(o){
+  const target=o.type==='income'?S.inc:S.tx;
+  return target.some(t=>{const td=new Date(t.date);const ds=`${td.getFullYear()}-${String(td.getMonth()+1).padStart(2,'0')}-${String(td.getDate()).padStart(2,'0')}`;return ds===o.date&&Math.abs(t.amount-o.absAmount)<0.005;});
+}
+function finishImportParse(rows){
+  rows=(rows||[]).filter(r=>r&&r.date&&!isNaN(r.amount)&&Math.abs(r.amount)>0);
+  if(!rows.length){toast('Nenhuma transação encontrada no arquivo.');return;}
+  window._importRows=rows.map(r=>{
+    const type=r.amount<0?'expense':'income';
+    const o={date:r.date,absAmount:Math.abs(r.amount),desc:impCleanDesc(r.desc),type,cat:categorize(r.desc,type)};
+    o.dup=impIsDup(o);o.include=!o.dup;return o;
+  });
+  openImportReview();
+}
+
+// --- Tela de revisão ---
+function impCatOptions(sel,type){
+  return (type==='income'?ICATS:CATS).map(c=>`<option value="${c.id}" ${c.id===sel?'selected':''}>${c.icon} ${c.label}</option>`).join('');
+}
+function impRowHTML(r,i){
+  const inc=r.type==='income';
+  return `<div class="card" style="padding:10px;margin-bottom:8px;${r.dup?'opacity:.5':''}">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+      <input type="checkbox" ${r.include?'checked':''} onchange="impToggle(${i},this.checked)" style="width:18px;height:18px;flex-shrink:0;accent-color:var(--pri)">
+      <div style="flex:1;min-width:0">
+        <div class="item-name" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${r.desc||'(sem descrição)'}</div>
+        <div class="item-sub">${r.date}${r.dup?' · <span style="color:var(--amb)">já existe</span>':''}</div>
+      </div>
+      <div style="font-weight:700;font-size:14px;color:${inc?'var(--grn)':'var(--pri)'}">${inc?'+':'−'}${fmtS(r.absAmount)}</div>
+    </div>
+    <div style="display:flex;gap:6px">
+      <select class="f-inp" style="flex:1;padding:6px 8px;font-size:12px" onchange="impSetCat(${i},this.value)">${impCatOptions(r.cat,r.type)}</select>
+      <button class="btn btn-ghost btn-sm" onclick="impFlip(${i})" style="white-space:nowrap">${inc?'Receita':'Despesa'} ↔</button>
+    </div>
+  </div>`;
+}
+function renderImportList(){
+  const el=document.getElementById('imp-list');if(!el)return;
+  el.innerHTML=window._importRows.map((r,i)=>impRowHTML(r,i)).join('');
+  const n=window._importRows.filter(r=>r.include).length;
+  const cnt=document.getElementById('imp-count');if(cnt)cnt.textContent=n;
+}
+window.impToggle=(i,v)=>{window._importRows[i].include=v;const cnt=document.getElementById('imp-count');if(cnt)cnt.textContent=window._importRows.filter(r=>r.include).length;};
+window.impSetCat=(i,v)=>{window._importRows[i].cat=v;};
+window.impFlip=i=>{const r=window._importRows[i];r.type=r.type==='income'?'expense':'income';r.cat=categorize(r.desc,r.type);renderImportList();};
+window.impSelectAll=v=>{window._importRows.forEach(r=>r.include=v);renderImportList();};
+function openImportReview(){
+  const tot=window._importRows.length,sel=window._importRows.filter(r=>r.include).length;
+  sheet(`<div class="sheet-drag"></div><div class="sheet-title">Revisar importação</div>
+    <div style="font-size:12px;color:var(--txm);margin-bottom:10px">${tot} transações encontradas · <b id="imp-count">${sel}</b> selecionadas. Confira a categoria e desmarque o que não quer importar.</div>
+    <div style="display:flex;gap:8px;margin-bottom:10px">
+      <button class="btn btn-ghost btn-sm" style="flex:1" onclick="impSelectAll(true)">Marcar todos</button>
+      <button class="btn btn-ghost btn-sm" style="flex:1" onclick="impSelectAll(false)">Desmarcar todos</button>
+    </div>
+    <div id="imp-list">${window._importRows.map((r,i)=>impRowHTML(r,i)).join('')}</div>
+    <button class="btn btn-pri btn-full" style="margin-top:6px" onclick="confirmImport()">Importar selecionados</button>
+  `);
+}
+function confirmImport(){
+  const rows=(window._importRows||[]).filter(r=>r.include);
+  if(!rows.length){toast('Nada selecionado.');return;}
+  let nE=0,nI=0;
+  rows.forEach(r=>{
+    const iso=new Date(r.date+'T12:00:00').toISOString();
+    if(r.type==='income'){S.inc.push({id:uid(),amount:r.absAmount,category:r.cat,label:r.desc||'Importado',user:'u1',date:iso});nI++;}
+    else{S.tx.push({id:uid(),amount:r.absAmount,category:r.cat,label:r.desc||'Importado',user:'u1',date:iso});nE++;}
+    learnRule(r.desc,r.cat,r.type);
+  });
+  persist('tx',S.tx);persist('inc',S.inc);
+  window._importRows=null;
+  closeSheet();render();
+  toast(`Importado: ${nE} despesa(s), ${nI} receita(s) ✓`);
+}
+
 // SHEET MODAL
 function sheet(html){
   const s=document.getElementById('sheet');
@@ -1630,6 +1920,7 @@ window.exportBackup=exportBackup;window.importBackup=importBackup;
 window.openAddRec=openAddRec;window.saveRec=saveRec;window.removeRec=removeRec;
 window.requestNotifications=requestNotifications;
 window.toggleDark=toggleDark;
+window.handleStatementFile=handleStatementFile;window.confirmImport=confirmImport;
 </script>
 </body>
 </html>
